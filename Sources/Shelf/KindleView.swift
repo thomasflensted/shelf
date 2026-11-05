@@ -63,6 +63,8 @@ struct KindleView: View {
     var body: some View {
         let lib = libraryKeys
         let inShelf: (KindleItem) -> Bool = { lib.keys.contains($0.dedupeKey) || lib.stems.contains($0.stem.lowercased()) }
+        // Things that would be lost for good if removed: sideloaded books that aren't in Shelf.
+        let unbackedUp: (KindleItem) -> Bool = { !$0.isPurchase && !inShelf($0) && $0.format != "TXT" }
 
         VStack(spacing: 0) {
             header
@@ -76,14 +78,20 @@ struct KindleView: View {
                     .width(min: 60, ideal: 80)
                 TableColumn("Added", value: \.modified) { Text($0.modified, format: .dateTime.year().month().day()) }
                     .width(min: 80, ideal: 100)
-                TableColumn("In Shelf") { item in
-                    if inShelf(item) { Image(systemName: "checkmark").foregroundStyle(.green) }
+                TableColumn("Source") { item in
+                    if item.isPurchase {
+                        Text("Amazon").foregroundStyle(.secondary).help("Bought from Amazon. Can be re-downloaded on the Kindle.")
+                    } else if inShelf(item) {
+                        Label("Shelf", systemImage: "checkmark").foregroundStyle(.green).help("Also in your Shelf library")
+                    } else if item.format != "TXT" {
+                        Text("Only here").foregroundStyle(.orange).help("Not in your Shelf library — copy it to Shelf before removing")
+                    }
                 }
-                .width(55)
+                .width(min: 60, ideal: 80)
             }
             .contextMenu(forSelectionType: KindleItem.ID.self) { ids in
                 let items = kindle.items.filter { ids.contains($0.id) }
-                let missing = items.filter { !inShelf($0) }
+                let missing = items.filter(unbackedUp)
                 if !missing.isEmpty {
                     Button("Copy to Shelf") { library.importItems(missing.map(\.url)) }
                 }
@@ -133,9 +141,11 @@ struct KindleView: View {
                 pendingRemove = []
             }
         } message: {
-            let notBackedUp = pendingRemove.filter { !inShelf($0) }.count
+            let notBackedUp = pendingRemove.filter(unbackedUp).count
+            let purchases = pendingRemove.filter(\.isPurchase).count
             Text("This deletes the files and their reading position and highlights from the Kindle."
-                 + (notBackedUp > 0 ? " \(notBackedUp) of them aren't in your Shelf library — copy them to Shelf first if you want to keep them." : " They stay in your Shelf library."))
+                 + (purchases > 0 ? " Amazon purchases can be downloaded again from the Kindle's library." : "")
+                 + (notBackedUp > 0 ? " \(notBackedUp) of them aren't in your Shelf library. Copy them to Shelf first if you want to keep them." : ""))
         }
         .confirmationDialog("Remove \(kindle.orphans.count) leftover folders?", isPresented: $confirmCleanUp) {
             Button("Clean Up", role: .destructive) { kindle.cleanUp() }

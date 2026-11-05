@@ -10,9 +10,11 @@ struct KindleItem: Identifiable, Hashable {
     let author: String
     let size: Int64
     let modified: Date
-    /// The `<name>.sdr` folder next to the file (reading position, highlights, page numbers), if any.
-    let sidecar: URL?
+    /// `.sdr` folders belonging to this book (reading position, highlights, and for Amazon books part of the book itself).
+    let sidecars: [URL]
     let dedupeKey: String
+    /// Bought from Amazon (DRM-protected; can be re-downloaded from the Kindle, can't be read in Shelf).
+    let isPurchase: Bool
 
     var format: String { url.pathExtension.uppercased() }
     var stem: String { url.deletingPathExtension().lastPathComponent }
@@ -101,12 +103,36 @@ final class Kindle {
         freeBytes = Int64(v.volumeAvailableCapacity ?? 0)
     }
 
+    /// The Amazon ID at the end of a file name: "Title_B079L5DDB4" or "Title_B079L5DDB4_sample".
+    nonisolated static func asin(_ stem: String) -> String? {
+        guard let m = stem.range(of: "_([A-Z0-9]{10})(_sample)?$", options: .regularExpression) else { return nil }
+        let id = stem[m].split(separator: "_").first.map(String.init) ?? ""
+        return id.contains(where: \.isNumber) ? id : nil
+    }
+
+    /// "Pragmatic Programmer, The_ Your journey…_B07VRS84D1" → "The Pragmatic Programmer: Your journey…"
+    nonisolated static func prettyTitle(_ stem: String) -> String {
+        var t = stem
+        let sample = t.hasSuffix("_sample")
+        if let m = t.range(of: "_([A-Z0-9]{10})(_sample)?$", options: .regularExpression) { t.removeSubrange(m) }
+        t = t.replacingOccurrences(of: "_ ", with: ": ").replacingOccurrences(of: "_", with: " ")
+        var head = t, tail = ""
+        if let cut = [t.range(of: ": "), t.range(of: " (")].compactMap({ $0 }).min(by: { $0.lowerBound < $1.lowerBound }) {
+            head = String(t[..<cut.lowerBound]); tail = String(t[cut.lowerBound...])
+        }
+        for article in ["The", "A", "An"] where head.hasSuffix(", \(article)") {
+            head = article + " " + head.dropLast(article.count + 2)
+        }
+        return head + tail + (sample ? " (sample)" : "")
+    }
+
     nonisolated static func scan(_ documents: URL) -> (items: [KindleItem], orphans: [URL], orphanBytes: Int64) {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
-        var items: [KindleItem] = []
+        var books: [(url: URL, size: Int64, modified: Date)] = []
         var sdrs: [URL] = []
         var stemsByDir: [URL: Set<String>] = [:]
+        var asinsByDir: [URL: Set<String>] = [:]
 
         let e = fm.enumerator(at: documents, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
         while let url = e?.nextObject() as? URL {
@@ -115,26 +141,40 @@ final class Kindle {
                 if url.pathExtension.lowercased() == "sdr" { sdrs.append(url); e?.skipDescendants() }
                 continue
             }
-            let dir = url.deletingLastPathComponent()
-            stemsByDir[dir, default: []].insert(url.deletingPathExtension().lastPathComponent)
             guard bookExtensions.contains(url.pathExtension.lowercased()) else { continue }
-
-            let meta = Metadata.extract(from: url, cover: false)
-            let title = meta.title?.nonEmpty ?? url.deletingPathExtension().lastPathComponent
-            let author = meta.author?.nonEmpty ?? ""
-            let sdr = dir.appendingPathComponent(url.deletingPathExtension().lastPathComponent + ".sdr")
-            let probe = Book(title: title, author: author, folder: "", files: [])
-            items.append(KindleItem(
-                url: url, title: title, author: author,
-                size: Int64(v?.fileSize ?? 0), modified: v?.contentModificationDate ?? .distantPast,
-                sidecar: fm.fileExists(atPath: sdr.path) ? sdr : nil,
-                dedupeKey: probe.dedupeKey))
+            let dir = url.deletingLastPathComponent(), stem = url.deletingPathExtension().lastPathComponent
+            stemsByDir[dir, default: []].insert(stem)
+            if let id = asin(stem) { asinsByDir[dir, default: []].insert(id) }
+            books.append((url, Int64(v?.fileSize ?? 0), v?.contentModificationDate ?? .distantPast))
         }
 
-        // A .sdr folder whose book file is gone is leftover junk.
+        // The Kindle often keeps a second, short-named .sdr per Amazon book ("Title_ASIN.sdr"), so match on ASIN too.
+        func belongs(_ sdr: URL, stem: String, asin id: String?) -> Bool {
+            let s = sdr.deletingPathExtension().lastPathComponent
+            return s == stem || (id != nil && asin(s) == id)
+        }
+
+        let purchasesDir = documents.appendingPathComponent("Downloads").path + "/"
+        let items = books.map { b -> KindleItem in
+            let dir = b.url.deletingLastPathComponent(), stem = b.url.deletingPathExtension().lastPathComponent
+            let id = asin(stem)
+            let meta = Metadata.extract(from: b.url, cover: false)
+            let fromFile = meta.title.flatMap { $0 == stem ? nil : $0 }
+            let title = fromFile ?? prettyTitle(stem)
+            let author = meta.author?.nonEmpty ?? ""
+            return KindleItem(
+                url: b.url, title: title, author: author, size: b.size, modified: b.modified,
+                sidecars: sdrs.filter { $0.deletingLastPathComponent() == dir && belongs($0, stem: stem, asin: id) },
+                dedupeKey: Book(title: title, author: author, folder: "", files: []).dedupeKey,
+                isPurchase: id != nil && b.url.path.hasPrefix(purchasesDir))
+        }
+
+        // A .sdr folder with no book file of the same name or Amazon ID is leftover junk.
         let orphans = sdrs.filter { sdr in
-            let stem = sdr.deletingPathExtension().lastPathComponent
-            return !(stemsByDir[sdr.deletingLastPathComponent()]?.contains(stem) ?? false)
+            let dir = sdr.deletingLastPathComponent(), stem = sdr.deletingPathExtension().lastPathComponent
+            if stemsByDir[dir]?.contains(stem) == true { return false }
+            if let id = asin(stem), asinsByDir[dir]?.contains(id) == true { return false }
+            return true
         }
         let orphanBytes = orphans.reduce(Int64(0)) { $0 + folderSize($1) }
         return (items, orphans, orphanBytes)
@@ -212,7 +252,7 @@ final class Kindle {
         for item in remove {
             do {
                 try fm.removeItem(at: item.url)
-                if let sdr = item.sidecar { try? fm.removeItem(at: sdr) }
+                for sdr in item.sidecars { try? fm.removeItem(at: sdr) }
             } catch { failures.append("\(item.title): \(error.localizedDescription)") }
         }
         if !failures.isEmpty { lastError = failures.joined(separator: "\n") }

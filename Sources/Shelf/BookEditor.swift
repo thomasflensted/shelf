@@ -33,7 +33,7 @@ struct BookEditor: View {
                         if let newCoverImage {
                             Image(nsImage: newCoverImage).resizable().aspectRatio(contentMode: .fill)
                         } else {
-                            CoverView(book: book)
+                            CoverView(book: book, coverURL: library.coverURL(book))
                         }
                     }
                     .frame(width: 160, height: 240)

@@ -204,6 +204,8 @@ struct ContentView: View {
 // MARK: - Grid
 
 struct BookGrid<Menu: View>: View {
+    @Environment(Library.self) private var library
+    @Environment(Kindle.self) private var kindle
     let books: [Book]
     @Binding var selection: Set<Book.ID>
     let open: (Set<Book.ID>) -> Void
@@ -214,7 +216,8 @@ struct BookGrid<Menu: View>: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 180), spacing: 22, alignment: .top)], spacing: 26) {
                 ForEach(books) { book in
-                    BookCell(book: book, selected: selection.contains(book.id))
+                    BookCell(book: book, selected: selection.contains(book.id), coverURL: library.coverURL(book),
+                             onKindle: kindle.contains(book), kindleName: kindle.name)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) { open([book.id]) }
                         .simultaneousGesture(TapGesture().onEnded { click(book) })
@@ -246,11 +249,13 @@ struct BookGrid<Menu: View>: View {
 struct BookCell: View {
     let book: Book
     let selected: Bool
-    @Environment(Kindle.self) private var kindle
+    let coverURL: URL
+    let onKindle: Bool
+    let kindleName: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CoverView(book: book)
+            CoverView(book: book, coverURL: coverURL)
                 .aspectRatio(2 / 3, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 2)
@@ -260,14 +265,14 @@ struct BookCell: View {
                         .padding(-4)
                 )
                 .overlay(alignment: .bottomTrailing) {
-                    if kindle.contains(book) {
+                    if onKindle {
                         Image(systemName: "checkmark.circle.fill")
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .green)
                             .font(.system(size: 18))
                             .shadow(radius: 2)
                             .padding(5)
-                            .help("On \(kindle.name)")
+                            .help("On \(kindleName)")
                     }
                 }
             VStack(alignment: .leading, spacing: 1) {
@@ -281,7 +286,8 @@ struct BookCell: View {
 
 struct CoverView: View {
     let book: Book
-    @Environment(Library.self) private var library
+    /// Passed in explicitly: Table cells don't reliably inherit environment objects.
+    let coverURL: URL
     @State private var image: NSImage?
 
     var body: some View {
@@ -295,7 +301,7 @@ struct CoverView: View {
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
         .task(id: book.coverKey) {
-            image = book.hasCover ? await ThumbnailCache.shared.image(at: library.coverURL(book), key: book.coverKey) : nil
+            image = book.hasCover ? await ThumbnailCache.shared.image(at: coverURL, key: book.coverKey) : nil
         }
     }
 
@@ -320,6 +326,7 @@ struct CoverView: View {
 // MARK: - List
 
 struct BookTable<Menu: View>: View {
+    @Environment(Library.self) private var library
     @Environment(Kindle.self) private var kindle
     let books: [Book]
     @Binding var selection: Set<Book.ID>
@@ -328,10 +335,13 @@ struct BookTable<Menu: View>: View {
     let menu: (Set<Book.ID>) -> Menu
 
     var body: some View {
+        // Resolve per-row values here, outside the cells.
+        let root = library.root
+        let onKindle = Set(books.filter { kindle.contains($0) }.map(\.id))
         Table(books, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Title", value: \.title) { b in
                 HStack(spacing: 8) {
-                    CoverView(book: b).frame(width: 20, height: 30).clipShape(RoundedRectangle(cornerRadius: 2))
+                    CoverView(book: b, coverURL: root.appendingPathComponent(b.folder).appendingPathComponent("cover.jpg")).frame(width: 20, height: 30).clipShape(RoundedRectangle(cornerRadius: 2))
                     Text(b.title)
                 }
             }
@@ -340,7 +350,7 @@ struct BookTable<Menu: View>: View {
             TableColumn("Formats") { Text($0.formats).foregroundStyle(.secondary) }
                 .width(min: 60, ideal: 90)
             TableColumn("Kindle") { b in
-                if kindle.contains(b) { Image(systemName: "checkmark").foregroundStyle(.green) }
+                if onKindle.contains(b.id) { Image(systemName: "checkmark").foregroundStyle(.green) }
             }
             .width(50)
             TableColumn("Added", value: \.added) { Text($0.added, format: .dateTime.year().month().day()) }
