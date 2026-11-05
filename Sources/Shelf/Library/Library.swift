@@ -59,7 +59,6 @@ final class Library {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         root = url
         UserDefaults.standard.set(url.path, forKey: "libraryPath")
-        ThumbnailCache.shared.removeAll()
         load()
     }
 

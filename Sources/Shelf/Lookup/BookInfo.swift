@@ -4,7 +4,6 @@ import Foundation
 struct BookInfo: Codable, Hashable {
     var source: String
     var title: String
-    var authors: [String] = []
     var year: String?
     var publisher: String?
     var pages: Int?
@@ -14,7 +13,6 @@ struct BookInfo: Codable, Hashable {
     var ratingsCount: Int?
     var isbn: String?
     var link: URL?
-    var coverURL: URL?
 }
 
 enum LookupState: Equatable {

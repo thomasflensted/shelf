@@ -108,15 +108,9 @@ enum Metadata {
     }
 
     private static func unzip(_ archive: URL, _ entry: String) -> Data? {
-        // unzip treats entry names as patterns; escape wildcard characters.
-        var escaped = ""
-        for c in entry {
-            if "[]*?\\".contains(c) { escaped.append("\\") }
-            escaped.append(c)
-        }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        p.arguments = ["-p", archive.path, escaped]
+        p.arguments = ["-p", archive.path, entry]
         let out = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
@@ -211,11 +205,10 @@ enum Metadata {
         return digits.count == 10 || digits.count == 13 ? digits : nil
     }
 
-    /// "Bryson, Bill" → "Bill Bryson". Leaves anything more complex alone.
+    /// "Bryson, Bill" → "Bill Bryson".
     static func flipName(_ name: String) -> String {
         let parts = name.components(separatedBy: ", ")
-        guard parts.count == 2, !parts[0].contains(" & "), !parts[1].contains(" & "),
-              parts[1].split(separator: " ").count <= 3 else { return name }
+        guard parts.count == 2 else { return name }
         return "\(parts[1]) \(parts[0])"
     }
 

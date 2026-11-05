@@ -31,10 +31,7 @@ final class XMLTree {
         func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
                     qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
             let node = XMLTree(name: Builder.local(elementName))
-            for (k, v) in attributeDict {
-                node.attrs[k] = v
-                node.attrs[Builder.local(k)] = v
-            }
+            for (k, v) in attributeDict { node.attrs[Builder.local(k)] = v }
             if let parent = stack.last { parent.children.append(node) } else { root = node }
             stack.append(node)
         }

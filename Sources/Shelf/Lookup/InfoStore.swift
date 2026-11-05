@@ -91,7 +91,7 @@ final class InfoStore {
     }
 
     nonisolated private static func openLibrary(title: String, author: String, isbn: String?) async throws -> BookInfo? {
-        let fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,publisher,ratings_average,ratings_count,isbn,cover_i"
+        let fields = "key,title,first_publish_year,number_of_pages_median,subject,publisher,ratings_average,ratings_count,isbn"
         func search(_ items: [URLQueryItem]) async throws -> [String: Any]? {
             var c = URLComponents(string: "https://openlibrary.org/search.json")!
             c.queryItems = items + [.init(name: "limit", value: "1"), .init(name: "fields", value: fields)]
@@ -107,7 +107,6 @@ final class InfoStore {
         guard let doc, let key = doc["key"] as? String else { return nil }
 
         var info = BookInfo(source: "Open Library", title: doc["title"] as? String ?? title)
-        info.authors = doc["author_name"] as? [String] ?? []
         info.year = (doc["first_publish_year"] as? Int).map(String.init)
         info.pages = doc["number_of_pages_median"] as? Int
         info.publisher = (doc["publisher"] as? [String])?.first
@@ -116,7 +115,6 @@ final class InfoStore {
         info.ratingsCount = doc["ratings_count"] as? Int
         info.isbn = isbn ?? (doc["isbn"] as? [String])?.first { $0.count == 13 }
         info.link = URL(string: "https://openlibrary.org\(key)")
-        if let cover = doc["cover_i"] as? Int { info.coverURL = URL(string: "https://covers.openlibrary.org/b/id/\(cover)-L.jpg") }
 
         let work = try? await json(URL(string: "https://openlibrary.org\(key).json")!)
         if let d = work?["description"] as? String {
@@ -142,7 +140,6 @@ final class InfoStore {
         guard let item = (try await json(c.url!)["items"] as? [[String: Any]])?.first,
               let v = item["volumeInfo"] as? [String: Any] else { return nil }
         var info = BookInfo(source: "Google Books", title: v["title"] as? String ?? title)
-        info.authors = v["authors"] as? [String] ?? []
         info.year = (v["publishedDate"] as? String).map { String($0.prefix(4)) }
         info.publisher = v["publisher"] as? String
         info.pages = v["pageCount"] as? Int

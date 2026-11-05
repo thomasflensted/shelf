@@ -47,7 +47,7 @@ enum Importer {
                 let new = c.files.filter { !have.contains($0.pathExtension.lowercased()) }
                 if new.isEmpty { result.skipped += 1; continue }
                 for f in new {
-                    let name = uniqueName(f.lastPathComponent, in: root.appendingPathComponent(match.folder))
+                    let name = sanitize(match.title) + "." + f.pathExtension.lowercased()
                     do {
                         try fm.copyItem(at: f, to: root.appendingPathComponent(match.folder).appendingPathComponent(name))
                         match.files.append(name)
@@ -61,16 +61,12 @@ enum Importer {
 
             // New book folder: Author/Title
             let authorDir = sanitize(author.components(separatedBy: " & ").first ?? author)
-            var folder = "\(authorDir)/\(sanitize(title))"
-            var suffix = 2
-            while fm.fileExists(atPath: root.appendingPathComponent(folder).path) {
-                folder = "\(authorDir)/\(sanitize(title)) (\(suffix))"; suffix += 1
-            }
+            let folder = "\(authorDir)/\(sanitize(title))"
             let dir = root.appendingPathComponent(folder, isDirectory: true)
             do {
                 try fm.createDirectory(at: dir, withIntermediateDirectories: true)
                 for f in c.files {
-                    let name = uniqueName(sanitize(title) + "." + f.pathExtension.lowercased(), in: dir)
+                    let name = sanitize(title) + "." + f.pathExtension.lowercased()
                     try fm.copyItem(at: f, to: dir.appendingPathComponent(name))
                     book.files.append(name)
                 }
@@ -135,16 +131,5 @@ enum Importer {
         while out.hasPrefix(".") { out.removeFirst() }
         if out.count > 80 { out = String(out.prefix(80)).trimmingCharacters(in: .whitespaces) }
         return out.isEmpty ? "Untitled" : out
-    }
-
-    static func uniqueName(_ name: String, in dir: URL) -> String {
-        let fm = FileManager.default
-        var candidate = name
-        var n = 2
-        let base = (name as NSString).deletingPathExtension, ext = (name as NSString).pathExtension
-        while fm.fileExists(atPath: dir.appendingPathComponent(candidate).path) {
-            candidate = "\(base) \(n).\(ext)"; n += 1
-        }
-        return candidate
     }
 }
