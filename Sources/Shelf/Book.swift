@@ -59,7 +59,12 @@ struct Book: Codable, Identifiable, Hashable {
         func norm(_ s: String) -> String {
             s.lowercased().filter { $0.isLetter || $0.isNumber }
         }
-        return norm(title) + "|" + norm(author)
+        // Author words sorted, so "Bryson, Bill" and "Bill Bryson" match.
+        let authorKey = author.lowercased()
+            .split { !($0.isLetter || $0.isNumber) }
+            .sorted()
+            .joined()
+        return norm(title) + "|" + authorKey
     }
 }
 

@@ -4,11 +4,13 @@ import SwiftUI
 struct ShelfApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var library = Library()
+    @State private var kindle = Kindle()
 
     var body: some Scene {
         Window("Shelf", id: "main") {
-            ContentView()
+            RootView()
                 .environment(library)
+                .environment(kindle)
                 .frame(minWidth: 640, minHeight: 420)
         }
         .defaultSize(width: 1000, height: 700)

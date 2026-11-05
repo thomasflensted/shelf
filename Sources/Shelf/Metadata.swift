@@ -23,12 +23,13 @@ struct ExtractedMetadata {
 }
 
 enum Metadata {
-    static func extract(from url: URL) -> ExtractedMetadata {
+    /// `cover: false` skips cover extraction and only reads the start of MOBI files (fast, for scanning a Kindle).
+    static func extract(from url: URL, cover: Bool = true) -> ExtractedMetadata {
         var meta: ExtractedMetadata
         switch url.pathExtension.lowercased() {
-        case "epub": meta = epub(url)
-        case "mobi", "azw", "azw3", "prc": meta = mobi(url)
-        case "pdf": meta = pdf(url)
+        case "epub": meta = epub(url, cover: cover)
+        case "mobi", "azw", "azw3", "prc": meta = mobi(url, cover: cover)
+        case "pdf": meta = pdf(url, cover: cover)
         default: meta = ExtractedMetadata()
         }
         if meta.title?.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
@@ -88,14 +89,14 @@ enum Metadata {
 
     // MARK: EPUB
 
-    static func epub(_ url: URL) -> ExtractedMetadata {
+    static func epub(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
         guard let container = unzip(url, "META-INF/container.xml"),
               let tree = XMLTree.parse(container),
               let opfPath = tree.first("rootfile")?.attrs["full-path"],
               let opfData = unzip(url, opfPath)
         else { return ExtractedMetadata() }
         let base = (opfPath as NSString).deletingLastPathComponent
-        return opf(opfData, baseDir: base) { unzip(url, $0) }
+        return opf(opfData, baseDir: base, coverLoader: cover ? { unzip(url, $0) } : nil)
     }
 
     private static func unzip(_ archive: URL, _ entry: String) -> Data? {
@@ -119,8 +120,17 @@ enum Metadata {
 
     // MARK: MOBI / AZW / AZW3
 
-    static func mobi(_ url: URL) -> ExtractedMetadata {
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return ExtractedMetadata() }
+    static func mobi(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
+        let data: Data?
+        if cover {
+            data = try? Data(contentsOf: url, options: .mappedIfSafe)
+        } else {
+            // Header, record 0 and EXTH sit at the start of the file.
+            let h = try? FileHandle(forReadingFrom: url)
+            data = try? h?.read(upToCount: 512 * 1024)
+            try? h?.close()
+        }
+        guard let data else { return ExtractedMetadata() }
         let b = [UInt8](data)
         func u32(_ o: Int) -> Int? {
             guard o >= 0, o + 4 <= b.count else { return nil }
@@ -173,9 +183,9 @@ enum Metadata {
                 }
             }
         }
-        m.author = authors.joined(separator: " & ")
+        m.author = authors.map(flipName).joined(separator: " & ")
 
-        if let rel = coverOffset ?? thumbOffset, rel != 0xFFFFFFFF {
+        if cover, let rel = coverOffset ?? thumbOffset, rel != 0xFFFFFFFF {
             let idx = firstImage + rel
             if idx < offsets.count {
                 let start = offsets[idx]
@@ -186,15 +196,23 @@ enum Metadata {
         return m
     }
 
+    /// "Bryson, Bill" → "Bill Bryson". Leaves anything more complex alone.
+    static func flipName(_ name: String) -> String {
+        let parts = name.components(separatedBy: ", ")
+        guard parts.count == 2, !parts[0].contains(" & "), !parts[1].contains(" & "),
+              parts[1].split(separator: " ").count <= 3 else { return name }
+        return "\(parts[1]) \(parts[0])"
+    }
+
     // MARK: PDF
 
-    static func pdf(_ url: URL) -> ExtractedMetadata {
+    static func pdf(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
         var m = ExtractedMetadata()
         guard let doc = PDFDocument(url: url) else { return m }
         let attrs = doc.documentAttributes ?? [:]
         m.title = attrs[PDFDocumentAttribute.titleAttribute] as? String
         m.author = attrs[PDFDocumentAttribute.authorAttribute] as? String
-        if let page = doc.page(at: 0) {
+        if cover, let page = doc.page(at: 0) {
             let thumb = page.thumbnail(of: NSSize(width: 600, height: 900), for: .mediaBox)
             m.cover = jpeg(thumb)
         }

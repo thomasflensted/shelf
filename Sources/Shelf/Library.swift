@@ -107,41 +107,6 @@ final class Library {
         NSWorkspace.shared.activateFileViewerSelecting(books.compactMap { b in b.preferredFiles.first.map { fileURL(b, $0) } })
     }
 
-    // MARK: Kindle
-
-    /// A mounted Kindle (USB mass storage) — has a `documents` folder and a `system` folder.
-    var kindleVolume: URL? {
-        let fm = FileManager.default
-        let volumes = fm.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) ?? []
-        return volumes.first { v in
-            fm.fileExists(atPath: v.appendingPathComponent("documents").path)
-                && fm.fileExists(atPath: v.appendingPathComponent("system").path)
-        }
-    }
-
-    func sendToKindle(_ books: [Book]) {
-        guard let kindle = kindleVolume else { lastError = "No Kindle connected."; return }
-        let order = ["azw3", "mobi", "azw", "kfx", "pdf", "txt"]
-        var skipped: [String] = []
-        for b in books {
-            let file = b.files
-                .filter { order.contains(($0 as NSString).pathExtension.lowercased()) }
-                .min { order.firstIndex(of: ($0 as NSString).pathExtension.lowercased())! < order.firstIndex(of: ($1 as NSString).pathExtension.lowercased())! }
-            guard let file else { skipped.append(b.title); continue }
-            let ext = (file as NSString).pathExtension
-            let name = Importer.sanitize("\(b.title) - \(b.author)") + "." + ext
-            let dest = kindle.appendingPathComponent("documents").appendingPathComponent(name)
-            try? FileManager.default.removeItem(at: dest)
-            do { try FileManager.default.copyItem(at: fileURL(b, file), to: dest) } catch { skipped.append(b.title) }
-        }
-        if !skipped.isEmpty {
-            lastError = "No Kindle-compatible format for: " + skipped.joined(separator: ", ")
-        } else {
-            importStatus = "Sent \(books.count) book\(books.count == 1 ? "" : "s") to Kindle"
-            clearStatusSoon()
-        }
-    }
-
     // MARK: Importing
 
     func presentAddPanel() {

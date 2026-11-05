@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(Library.self) private var library
+    @Environment(Kindle.self) private var kindle
     @State private var search = ""
     @State private var selection = Set<Book.ID>()
     @State private var sortOrder = [KeyPathComparator(\Book.added, order: .reverse)]
@@ -80,6 +81,13 @@ struct ContentView: View {
                 .disabled(selection.count != 1)
                 .help("Edit info (⌘I)")
 
+            if kindle.connected {
+                Button { kindle.send(selectedBooks, from: library) } label: { Label("Send to Kindle", systemImage: "square.and.arrow.down.on.square") }
+                    .keyboardShortcut("k")
+                    .disabled(selection.isEmpty)
+                    .help("Copy selected books to \(kindle.name) (⌘K)")
+            }
+
             Button { pendingTrash = selection } label: { Label("Move to Trash", systemImage: "trash") }
                 .keyboardShortcut(.delete)
                 .disabled(selection.isEmpty)
@@ -126,8 +134,8 @@ struct ContentView: View {
 
     private var statusBar: some View {
         HStack {
-            if let status = library.importStatus {
-                if status.hasPrefix("Importing") { ProgressView().controlSize(.small) }
+            if let status = library.importStatus ?? kindle.status {
+                if status.hasPrefix("Importing") || status.hasPrefix("Sending") { ProgressView().controlSize(.small) }
                 Text(status)
             } else if !search.isEmpty {
                 Text("\(visible.count) of \(library.books.count) books")
@@ -139,7 +147,7 @@ struct ContentView: View {
         .font(.callout)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
-        .frame(height: library.importStatus == nil && search.isEmpty && selection.isEmpty ? 0 : 26)
+        .frame(height: library.importStatus == nil && kindle.status == nil && search.isEmpty && selection.isEmpty ? 0 : 26)
         .clipped()
         .background(.bar)
     }
@@ -179,8 +187,13 @@ struct ContentView: View {
             }
             Divider()
             Button("Show in Finder") { library.reveal(books) }
-            if library.kindleVolume != nil {
-                Button("Send to Kindle") { library.sendToKindle(books) }
+            if kindle.connected {
+                Divider()
+                Button("Send to \(kindle.name)") { kindle.send(books, from: library) }
+                let onDevice = books.flatMap { kindle.items(for: $0) }
+                if !onDevice.isEmpty {
+                    Button("Remove from \(kindle.name)") { kindle.remove(onDevice) }
+                }
             }
             Divider()
             Button("Move to Trash…", role: .destructive) { pendingTrash = ids }
@@ -233,6 +246,7 @@ struct BookGrid<Menu: View>: View {
 struct BookCell: View {
     let book: Book
     let selected: Bool
+    @Environment(Kindle.self) private var kindle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -245,6 +259,17 @@ struct BookCell: View {
                         .strokeBorder(Color.accentColor, lineWidth: selected ? 3 : 0)
                         .padding(-4)
                 )
+                .overlay(alignment: .bottomTrailing) {
+                    if kindle.contains(book) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .green)
+                            .font(.system(size: 18))
+                            .shadow(radius: 2)
+                            .padding(5)
+                            .help("On \(kindle.name)")
+                    }
+                }
             VStack(alignment: .leading, spacing: 1) {
                 Text(book.title).font(.callout.weight(.medium)).lineLimit(2)
                 Text(book.author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -295,6 +320,7 @@ struct CoverView: View {
 // MARK: - List
 
 struct BookTable<Menu: View>: View {
+    @Environment(Kindle.self) private var kindle
     let books: [Book]
     @Binding var selection: Set<Book.ID>
     @Binding var sortOrder: [KeyPathComparator<Book>]
@@ -313,6 +339,10 @@ struct BookTable<Menu: View>: View {
             TableColumn("Series", value: \.seriesSort) { Text($0.seriesLabel) }
             TableColumn("Formats") { Text($0.formats).foregroundStyle(.secondary) }
                 .width(min: 60, ideal: 90)
+            TableColumn("Kindle") { b in
+                if kindle.contains(b) { Image(systemName: "checkmark").foregroundStyle(.green) }
+            }
+            .width(50)
             TableColumn("Added", value: \.added) { Text($0.added, format: .dateTime.year().month().day()) }
                 .width(min: 80, ideal: 100)
         }
