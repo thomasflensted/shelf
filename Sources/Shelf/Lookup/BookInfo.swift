@@ -1,6 +1,5 @@
 import Foundation
 
-/// Information about a book from an online catalogue.
 struct BookInfo: Codable, Hashable {
     var source: String
     var title: String
@@ -13,6 +12,17 @@ struct BookInfo: Codable, Hashable {
     var ratingsCount: Int?
     var isbn: String?
     var link: URL?
+
+    var isMissingDetails: Bool { description == nil || pages == nil }
+
+    func filling(from other: BookInfo) -> BookInfo {
+        var info = self
+        info.description = description ?? other.description
+        info.pages = pages ?? other.pages
+        info.publisher = publisher ?? other.publisher
+        if subjects.isEmpty { info.subjects = other.subjects }
+        return info
+    }
 }
 
 enum LookupState: Equatable {

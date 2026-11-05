@@ -8,6 +8,8 @@ struct BookInspector: View {
     @Environment(InfoStore.self) private var info
     @State private var expanded = false
 
+    private var files: [URL] { book.files.map { library.fileURL(book, $0) } }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -39,10 +41,7 @@ struct BookInspector: View {
         }
         .task(id: book.id) {
             expanded = false
-            let files = book.files.map { library.fileURL(book, $0) }
-            info.load(book, isbnFromFiles: {
-                files.lazy.compactMap { Metadata.extract(from: $0, cover: false).isbn }.first
-            })
+            info.load(book, files: files)
         }
     }
 
@@ -94,16 +93,9 @@ struct BookInspector: View {
             }
         }
 
-        let missing = (book.summary == nil && i.description != nil) || (book.isbn == nil && i.isbn != nil)
-            || (book.tags.isEmpty && !i.subjects.isEmpty)
-        if missing {
-            Button("Save Details to Book") {
-                var b = book
-                if b.summary == nil { b.summary = i.description }
-                if b.isbn == nil { b.isbn = i.isbn }
-                if b.tags.isEmpty { b.tags = Array(i.subjects.prefix(5)) }
-                library.update(b)
-            }
+        let filled = book.fillingGaps(from: i)
+        if filled != book {
+            Button("Save Details to Book") { library.update(filled) }
             .help("Fill in the missing description, ISBN and tags from \(i.source)")
         }
 
@@ -151,10 +143,7 @@ struct BookInspector: View {
         HStack {
             Text(text).font(.callout).foregroundStyle(.secondary)
             if retry {
-                Button("Retry") {
-                    let files = book.files.map { library.fileURL(book, $0) }
-                    info.load(book, isbnFromFiles: { files.lazy.compactMap { Metadata.extract(from: $0, cover: false).isbn }.first }, force: true)
-                }
+                Button("Retry") { info.load(book, files: files, force: true) }
                 .buttonStyle(.link)
             }
         }

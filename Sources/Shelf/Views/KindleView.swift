@@ -9,24 +9,16 @@ struct KindleView: View {
     @State private var pendingRemove: [KindleItem] = []
     @State private var confirmCleanUp = false
 
-    private var libraryKeys: (keys: Set<String>, stems: Set<String>) {
-        (Set(library.books.map(\.dedupeKey)),
-         Set(library.books.map { "\($0.title) - \($0.author)".safeFileName.lowercased() }))
-    }
-
     private var visible: [KindleItem] {
         let q = search.trimmingCharacters(in: .whitespaces)
-        let items = q.isEmpty ? kindle.items : kindle.items.filter { item in
-            q.split(separator: " ").allSatisfy { "\(item.title) \(item.author)".localizedCaseInsensitiveContains($0) }
-        }
+        let items = q.isEmpty ? kindle.items : kindle.items.filter { "\($0.title) \($0.author)".containsAllWords(of: q) }
         return items.sorted(using: sortOrder)
     }
 
     var body: some View {
-        let lib = libraryKeys
-        let inShelf: (KindleItem) -> Bool = { lib.keys.contains($0.dedupeKey) || lib.stems.contains($0.stem.lowercased()) }
-        // Things that would be lost for good if removed: sideloaded books that aren't in Shelf.
-        let unbackedUp: (KindleItem) -> Bool = { !$0.isPurchase && !inShelf($0) && $0.format != "TXT" }
+        let inLibrary = MatchKeys(books: library.books)
+        let inShelf: (KindleItem) -> Bool = inLibrary.contains
+        let unbackedUp: (KindleItem) -> Bool = { $0.needsBackup(isInLibrary: inLibrary.contains($0)) }
 
         VStack(spacing: 0) {
             header
@@ -36,7 +28,7 @@ struct KindleView: View {
                 TableColumn("Author", value: \.author)
                 TableColumn("Format", value: \.format) { Text($0.format).foregroundStyle(.secondary) }
                     .width(min: 50, ideal: 60)
-                TableColumn("Size", value: \.size) { Text(ByteCountFormatter.string(fromByteCount: $0.size, countStyle: .file)).monospacedDigit() }
+                TableColumn("Size", value: \.size) { Text($0.size.formatted(.byteCount(style: .file))).monospacedDigit() }
                     .width(min: 60, ideal: 80)
                 TableColumn("Added", value: \.modified) { Text($0.modified, format: .dateTime.year().month().day()) }
                     .width(min: 80, ideal: 100)
@@ -45,7 +37,7 @@ struct KindleView: View {
                         Text("Amazon").foregroundStyle(.secondary).help("Bought from Amazon. Can be re-downloaded on the Kindle.")
                     } else if inShelf(item) {
                         Label("Shelf", systemImage: "checkmark").foregroundStyle(.green).help("Also in your Shelf library")
-                    } else if item.format != "TXT" {
+                    } else if !item.isClippings {
                         Text("Only here").foregroundStyle(.orange).help("Not in your Shelf library — copy it to Shelf before removing")
                     }
                 }
@@ -123,7 +115,8 @@ struct KindleView: View {
     private var header: some View {
         let used = max(kindle.totalBytes - kindle.freeBytes, 0)
         let fraction = kindle.totalBytes > 0 ? Double(used) / Double(kindle.totalBytes) : 0
-        let fmt = { (b: Int64) in ByteCountFormatter.string(fromByteCount: b, countStyle: .file) }
+        let level = StorageLevel(used: used, total: kindle.totalBytes)
+        let fmt = { (bytes: Int64) in bytes.formatted(.byteCount(style: .file)) }
         let booksBytes = kindle.items.reduce(Int64(0)) { $0 + $1.size }
 
         return HStack(alignment: .center, spacing: 24) {
@@ -135,9 +128,9 @@ struct KindleView: View {
                         .foregroundStyle(.secondary).monospacedDigit()
                 }
                 ProgressView(value: fraction)
-                    .tint(fraction > 0.9 ? .red : fraction > 0.75 ? .orange : .accentColor)
-                Text("Books use \(fmt(booksBytes))" + (fraction > 0.9 ? " · Almost full, which slows the Kindle down. Remove large books you've finished." : ""))
-                    .font(.caption).foregroundStyle(fraction > 0.9 ? .red : .secondary)
+                    .tint(level == .almostFull ? .red : level == .high ? .orange : .accentColor)
+                Text("Books use \(fmt(booksBytes))" + (level == .almostFull ? " · Almost full, which slows the Kindle down. Remove large books you've finished." : ""))
+                    .font(.caption).foregroundStyle(level == .almostFull ? .red : .secondary)
             }
             .frame(maxWidth: 520)
 
