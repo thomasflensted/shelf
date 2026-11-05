@@ -1,6 +1,9 @@
 import Foundation
 
 struct Book: Codable, Identifiable, Hashable {
+    static let unknownAuthor = "Unknown"
+    static let coverFileName = "cover.jpg"
+
     var id = UUID()
     var title: String
     var author: String
@@ -10,61 +13,57 @@ struct Book: Codable, Identifiable, Hashable {
     var summary: String?
     var isbn: String?
     var added = Date()
-    /// Folder relative to the library root.
     var folder: String
-    /// File names inside `folder`.
     var files: [String]
     var hasCover = false
     var coverVersion = 0
 
     var coverKey: String { "\(id)-\(coverVersion)-\(hasCover)" }
 
-    var formats: String {
-        files.map { ($0 as NSString).pathExtension.uppercased() }.sorted().joined(separator: ", ")
+    var formats: String { files.map { Formats.ext($0).uppercased() }.sorted().joined(separator: ", ") }
+
+    var preferredFiles: [String] { Formats.sorted(files, by: Formats.readingOrder) }
+
+    var firstAuthor: String { author.components(separatedBy: " & ").first ?? author }
+
+    var authorSort: String {
+        let parts = firstAuthor.split(separator: " ")
+        guard parts.count > 1, let last = parts.last else { return firstAuthor }
+        return "\(last), \(parts.dropLast().joined(separator: " "))"
     }
 
-    /// "Christie, Agatha" style sort key for the first author.
-    var authorSort: String {
-        let first = author.components(separatedBy: " & ").first ?? author
-        let parts = first.split(separator: " ")
-        guard parts.count > 1, let last = parts.last else { return first }
-        return "\(last), \(parts.dropLast().joined(separator: " "))"
+    var seriesNumber: String? {
+        seriesIndex.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? String(Int($0)) : String($0) }
     }
 
     var seriesLabel: String {
         guard let series, !series.isEmpty else { return "" }
-        guard let i = seriesIndex else { return series }
-        let n = i.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(i)) : String(i)
-        return "\(series) #\(n)"
+        return seriesNumber.map { "\(series) #\($0)" } ?? series
     }
 
     var seriesSort: String { series.map { "\($0) \(String(format: "%08.2f", seriesIndex ?? 0))" } ?? "" }
 
+    var dedupeKey: String { Book.dedupeKey(title: title, author: author) }
+
+    static func dedupeKey(title: String, author: String) -> String {
+        let titleKey = title.lowercased().filter { $0.isLetter || $0.isNumber }
+        let wordOrderInsensitiveAuthorKey = author.lowercased().split { !($0.isLetter || $0.isNumber) }.sorted().joined()
+        return titleKey + "|" + wordOrderInsensitiveAuthorKey
+    }
+
     func matches(_ query: String) -> Bool {
-        let hay = [title, author, series ?? "", tags.joined(separator: " ")].joined(separator: " ")
-        return query.split(separator: " ").allSatisfy { hay.localizedCaseInsensitiveContains($0) }
+        [title, author, series ?? "", tags.joined(separator: " ")].joined(separator: " ").containsAllWords(of: query)
     }
 
-    static let readingOrder = ["epub", "azw3", "mobi", "azw", "pdf", "cbz", "cbr", "fb2", "djvu", "txt", "rtf"]
+    func folderURL(in root: URL) -> URL { root.appendingPathComponent(folder, isDirectory: true) }
 
-    /// Files ordered by how good they are to open.
-    var preferredFiles: [String] {
-        files.sorted { a, b in
-            let ia = Book.readingOrder.firstIndex(of: (a as NSString).pathExtension.lowercased()) ?? 99
-            let ib = Book.readingOrder.firstIndex(of: (b as NSString).pathExtension.lowercased()) ?? 99
-            return ia < ib
-        }
-    }
+    func coverURL(in root: URL) -> URL { folderURL(in: root).appendingPathComponent(Book.coverFileName) }
 
-    var dedupeKey: String {
-        func norm(_ s: String) -> String {
-            s.lowercased().filter { $0.isLetter || $0.isNumber }
-        }
-        // Author words sorted, so "Bryson, Bill" and "Bill Bryson" match.
-        let authorKey = author.lowercased()
-            .split { !($0.isLetter || $0.isNumber) }
-            .sorted()
-            .joined()
-        return norm(title) + "|" + authorKey
+    func fillingGaps(from info: BookInfo) -> Book {
+        var book = self
+        if book.summary == nil { book.summary = info.description }
+        if book.isbn == nil { book.isbn = info.isbn }
+        if book.tags.isEmpty { book.tags = Array(info.subjects.prefix(5)) }
+        return book
     }
 }

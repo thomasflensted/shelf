@@ -20,7 +20,7 @@ struct BookEditor: View {
         _title = State(initialValue: book.title)
         _author = State(initialValue: book.author)
         _series = State(initialValue: book.series ?? "")
-        _seriesIndex = State(initialValue: book.seriesIndex.map { $0.truncatingRemainder(dividingBy: 1) == 0 ? String(Int($0)) : String($0) } ?? "")
+        _seriesIndex = State(initialValue: book.seriesNumber ?? "")
         _tags = State(initialValue: book.tags.joined(separator: ", "))
         _summary = State(initialValue: book.summary ?? "")
     }
@@ -102,12 +102,12 @@ struct BookEditor: View {
 
     private func save() {
         var b = book
-        b.title = title.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? book.title
-        b.author = author.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Unknown"
+        b.title = title.trimmed.nonEmpty ?? book.title
+        b.author = author.trimmed.nonEmpty ?? Book.unknownAuthor
         b.series = series.trimmingCharacters(in: .whitespaces).nonEmpty
         b.seriesIndex = b.series == nil ? nil : Double(seriesIndex.replacingOccurrences(of: ",", with: "."))
         b.tags = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        b.summary = summary.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        b.summary = summary.trimmed.nonEmpty
         library.update(b, newCover: newCover)
         dismiss()
     }

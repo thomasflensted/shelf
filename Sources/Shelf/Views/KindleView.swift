@@ -11,7 +11,7 @@ struct KindleView: View {
 
     private var libraryKeys: (keys: Set<String>, stems: Set<String>) {
         (Set(library.books.map(\.dedupeKey)),
-         Set(library.books.map { Importer.sanitize("\($0.title) - \($0.author)").lowercased() }))
+         Set(library.books.map { "\($0.title) - \($0.author)".safeFileName.lowercased() }))
     }
 
     private var visible: [KindleItem] {

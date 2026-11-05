@@ -24,11 +24,8 @@ final class Library {
 
     private var indexURL: URL { root.appendingPathComponent("library.json") }
 
-    func url(for book: Book) -> URL { root.appendingPathComponent(book.folder, isDirectory: true) }
-    func fileURL(_ book: Book, _ file: String) -> URL { url(for: book).appendingPathComponent(file) }
-    func coverURL(_ book: Book) -> URL { url(for: book).appendingPathComponent("cover.jpg") }
-
-    // MARK: Persistence
+    func fileURL(_ book: Book, _ file: String) -> URL { book.folderURL(in: root).appendingPathComponent(file) }
+    func coverURL(_ book: Book) -> URL { book.coverURL(in: root) }
 
     func load() {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -62,8 +59,6 @@ final class Library {
         load()
     }
 
-    // MARK: Editing
-
     func update(_ book: Book, newCover: URL? = nil) {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
         var b = book
@@ -83,19 +78,13 @@ final class Library {
     func trash(_ ids: Set<Book.ID>) {
         let fm = FileManager.default
         for book in books where ids.contains(book.id) {
-            let folder = url(for: book)
+            let folder = book.folderURL(in: root)
             try? fm.trashItem(at: folder, resultingItemURL: nil)
-            // Remove the author folder if it's now empty.
-            let parent = folder.deletingLastPathComponent()
-            if parent != root, (try? fm.contentsOfDirectory(atPath: parent.path))?.filter({ !$0.hasPrefix(".") }).isEmpty == true {
-                try? fm.removeItem(at: parent)
-            }
+            removeIfEmpty(folder.deletingLastPathComponent())
         }
         books.removeAll { ids.contains($0.id) }
         save()
     }
-
-    // MARK: Opening
 
     func open(_ book: Book, file: String? = nil) {
         guard let f = file ?? book.preferredFiles.first else { return }
@@ -105,8 +94,6 @@ final class Library {
     func reveal(_ books: [Book]) {
         NSWorkspace.shared.activateFileViewerSelecting(books.compactMap { b in b.preferredFiles.first.map { fileURL(b, $0) } })
     }
-
-    // MARK: Importing
 
     func presentAddPanel() {
         let panel = NSOpenPanel()
@@ -133,13 +120,17 @@ final class Library {
                 if let i = books.firstIndex(where: { $0.id == b.id }) { books[i] = b } else { books.append(b) }
             }
             save()
-            var msg = "Added \(result.added) book\(result.added == 1 ? "" : "s")"
-            if result.merged > 0 { msg += ", \(result.merged) new format\(result.merged == 1 ? "" : "s")" }
-            if result.skipped > 0 { msg += ", \(result.skipped) already in library" }
-            importStatus = msg
+            importStatus = result.summary
             if !result.errors.isEmpty { lastError = result.errors.prefix(5).joined(separator: "\n") }
             clearStatusSoon()
         }
+    }
+
+    private func removeIfEmpty(_ authorFolder: URL) {
+        guard authorFolder != root,
+              (try? FileManager.default.contentsOfDirectory(atPath: authorFolder.path))?.allSatisfy({ $0.hasPrefix(".") }) == true
+        else { return }
+        try? FileManager.default.removeItem(at: authorFolder)
     }
 
     private func clearStatusSoon() {

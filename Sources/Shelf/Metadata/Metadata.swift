@@ -12,7 +12,8 @@ struct ExtractedMetadata {
     var isbn: String?
     var cover: Data?
 
-    /// Fill gaps in self with values from other.
+    var isComplete: Bool { title != nil && !(author?.isEmpty ?? true) && cover != nil }
+
     mutating func merge(_ other: ExtractedMetadata) {
         if title?.isEmpty ?? true { title = other.title }
         if author?.isEmpty ?? true { author = other.author }
@@ -25,82 +26,85 @@ struct ExtractedMetadata {
 }
 
 enum Metadata {
-    /// `cover: false` skips cover extraction and only reads the start of MOBI files (fast, for scanning a Kindle).
     static func extract(from url: URL, cover: Bool = true) -> ExtractedMetadata {
         var meta: ExtractedMetadata
-        switch url.pathExtension.lowercased() {
+        switch Formats.ext(url.lastPathComponent) {
         case "epub": meta = epub(url, cover: cover)
-        case "mobi", "azw", "azw3", "prc": meta = mobi(url, cover: cover)
+        case "mobi", "azw", "azw3", "prc": meta = Mobi.read(url, cover: cover)
         case "pdf": meta = pdf(url, cover: cover)
         default: meta = ExtractedMetadata()
         }
-        if meta.title?.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+        if meta.title?.trimmed.isEmpty ?? true {
             meta.title = url.deletingPathExtension().lastPathComponent
         }
         return meta
     }
 
-    // MARK: OPF (EPUB package files and Calibre's metadata.opf)
-
     static func opf(_ data: Data, baseDir: String = "", coverLoader: ((String) -> Data?)? = nil) -> ExtractedMetadata {
         guard let root = XMLTree.parse(data) else { return ExtractedMetadata() }
+        let metas = Dictionary(
+            root.all("meta").compactMap { node in node.attrs["name"].map { ($0, node.attrs["content"] ?? "") } },
+            uniquingKeysWith: { first, _ in first })
+
         var m = ExtractedMetadata()
         m.title = root.first("title")?.text
-        let creators = root.all("creator")
-        let authors = creators.filter { ($0.attrs["role"] ?? "aut") == "aut" }.map(\.text).filter { !$0.isEmpty }
-        m.author = (authors.isEmpty ? creators.map(\.text) : authors).joined(separator: " & ")
-        m.isbn = root.all("identifier").lazy.compactMap { id -> String? in
-            let scheme = (id.attrs["scheme"] ?? "").lowercased()
-            let text = id.text.lowercased().replacingOccurrences(of: "urn:isbn:", with: "")
-            guard scheme == "isbn" || id.text.lowercased().hasPrefix("urn:isbn:") else { return nil }
-            return Metadata.cleanISBN(text)
-        }.first
+        m.author = authors(root.all("creator")).joined(separator: " & ")
+        m.isbn = root.all("identifier").lazy.compactMap(isbn).first
         m.tags = root.all("subject").map(\.text).filter { !$0.isEmpty }
-        if let d = root.first("description")?.text, !d.isEmpty { m.summary = stripHTML(d) }
-
-        var coverID: String?
-        for meta in root.all("meta") {
-            switch meta.attrs["name"] {
-            case "calibre:series": m.series = meta.attrs["content"]
-            case "calibre:series_index": m.seriesIndex = meta.attrs["content"].flatMap(Double.init)
-            case "cover": coverID = meta.attrs["content"]
-            default: break
-            }
-        }
-
-        if let coverLoader {
-            let items = root.all("item")
-            let item = items.first { ($0.attrs["properties"] ?? "").contains("cover-image") }
-                ?? items.first { $0.attrs["id"] == coverID && coverID != nil }
-                ?? items.first { ($0.attrs["id"] ?? "").lowercased().contains("cover") && ($0.attrs["media-type"] ?? "").hasPrefix("image/") }
-            if let href = item?.attrs["href"]?.removingPercentEncoding {
-                m.cover = coverLoader(resolve(href, against: baseDir))
-            }
+        m.summary = root.first("description")?.text.nonEmpty?.strippingHTML
+        m.series = metas["calibre:series"]
+        m.seriesIndex = metas["calibre:series_index"].flatMap(Double.init)
+        if let coverLoader, let href = coverHref(items: root.all("item"), coverID: metas["cover"]) {
+            m.cover = coverLoader(resolve(href, against: baseDir))
         }
         return m
     }
 
-    private static func resolve(_ href: String, against base: String) -> String {
+    static func coverHref(items: [XMLTree], coverID: String?) -> String? {
+        let item = items.first { ($0.attrs["properties"] ?? "").contains("cover-image") }
+            ?? items.first { coverID != nil && $0.attrs["id"] == coverID }
+            ?? items.first { ($0.attrs["id"] ?? "").lowercased().contains("cover") && ($0.attrs["media-type"] ?? "").hasPrefix("image/") }
+        return item?.attrs["href"]?.removingPercentEncoding
+    }
+
+    static func resolve(_ href: String, against base: String) -> String {
         var parts = base.split(separator: "/").map(String.init)
-        for p in href.split(separator: "/") {
-            if p == ".." { _ = parts.popLast() } else if p != "." { parts.append(String(p)) }
+        for part in href.split(separator: "/") {
+            if part == ".." { _ = parts.popLast() } else if part != "." { parts.append(String(part)) }
         }
         return parts.joined(separator: "/")
     }
 
-    private static func stripHTML(_ s: String) -> String {
-        s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    static func cleanISBN(_ s: String) -> String? {
+        let digits = s.uppercased().filter { $0.isNumber || $0 == "X" }
+        return digits.count == 10 || digits.count == 13 ? digits : nil
     }
 
-    // MARK: EPUB
+    static func flipName(_ name: String) -> String {
+        let parts = name.components(separatedBy: ", ")
+        guard parts.count == 2 else { return name }
+        return "\(parts[1]) \(parts[0])"
+    }
 
-    static func epub(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
+    static func jpeg(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85])
+    }
+
+    private static func authors(_ creators: [XMLTree]) -> [String] {
+        let authors = creators.filter { ($0.attrs["role"] ?? "aut") == "aut" }.map(\.text).filter { !$0.isEmpty }
+        return authors.isEmpty ? creators.map(\.text) : authors
+    }
+
+    private static func isbn(_ identifier: XMLTree) -> String? {
+        let text = identifier.text.lowercased()
+        guard identifier.attrs["scheme"]?.lowercased() == "isbn" || text.hasPrefix("urn:isbn:") else { return nil }
+        return cleanISBN(text.replacingOccurrences(of: "urn:isbn:", with: ""))
+    }
+
+    private static func epub(_ url: URL, cover: Bool) -> ExtractedMetadata {
         guard let container = unzip(url, "META-INF/container.xml"),
-              let tree = XMLTree.parse(container),
-              let opfPath = tree.first("rootfile")?.attrs["full-path"],
+              let opfPath = XMLTree.parse(container)?.first("rootfile")?.attrs["full-path"],
               let opfData = unzip(url, opfPath)
         else { return ExtractedMetadata() }
         let base = (opfPath as NSString).deletingLastPathComponent
@@ -108,127 +112,27 @@ enum Metadata {
     }
 
     private static func unzip(_ archive: URL, _ entry: String) -> Data? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        p.arguments = ["-p", archive.path, entry]
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-p", archive.path, entry]
         let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return nil }
+        process.standardOutput = out
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
         let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return p.terminationStatus == 0 && !data.isEmpty ? data : nil
+        process.waitUntilExit()
+        return process.terminationStatus == 0 && !data.isEmpty ? data : nil
     }
 
-    // MARK: MOBI / AZW / AZW3
-
-    static func mobi(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
-        let data: Data?
-        if cover {
-            data = try? Data(contentsOf: url, options: .mappedIfSafe)
-        } else {
-            // Header, record 0 and EXTH sit at the start of the file.
-            let h = try? FileHandle(forReadingFrom: url)
-            data = try? h?.read(upToCount: 512 * 1024)
-            try? h?.close()
-        }
-        guard let data else { return ExtractedMetadata() }
-        let b = [UInt8](data)
-        func u32(_ o: Int) -> Int? {
-            guard o >= 0, o + 4 <= b.count else { return nil }
-            return Int(b[o]) << 24 | Int(b[o + 1]) << 16 | Int(b[o + 2]) << 8 | Int(b[o + 3])
-        }
-        func u16(_ o: Int) -> Int? {
-            guard o >= 0, o + 2 <= b.count else { return nil }
-            return Int(b[o]) << 8 | Int(b[o + 1])
-        }
-        func ascii(_ o: Int, _ n: Int) -> String? {
-            guard o >= 0, o + n <= b.count else { return nil }
-            return String(bytes: b[o..<o + n], encoding: .ascii)
-        }
-
-        var m = ExtractedMetadata()
-        guard let count = u16(76), count > 0 else { return m }
-        let offsets = (0..<count).compactMap { u32(78 + $0 * 8) }
-        guard offsets.count == count, let rec0 = offsets.first,
-              ascii(rec0 + 16, 4) == "MOBI",
-              let headerLen = u32(rec0 + 20) else { return m }
-        let encoding: String.Encoding = u32(rec0 + 28) == 65001 ? .utf8 : .windowsCP1252
-        func string(_ o: Int, _ n: Int) -> String? {
-            guard o >= 0, n > 0, o + n <= b.count else { return nil }
-            return String(bytes: b[o..<o + n], encoding: encoding) ?? String(bytes: b[o..<o + n], encoding: .windowsCP1252)
-        }
-
-        if let off = u32(rec0 + 84), let len = u32(rec0 + 88) { m.title = string(rec0 + off, len) }
-        let firstImage = u32(rec0 + 108) ?? 0
-
-        var authors: [String] = []
-        var coverOffset: Int?
-        var thumbOffset: Int?
-        if let flags = u32(rec0 + 128), flags & 0x40 != 0 {
-            let exth = rec0 + 16 + headerLen
-            if ascii(exth, 4) == "EXTH", let n = u32(exth + 8) {
-                var p = exth + 12
-                for _ in 0..<n {
-                    guard let type = u32(p), let len = u32(p + 4), len >= 8 else { break }
-                    let body = p + 8, size = len - 8
-                    switch type {
-                    case 100: string(body, size).map { authors.append($0) }
-                    case 503: if let t = string(body, size), !t.isEmpty { m.title = t }
-                    case 103: m.summary = string(body, size).map(stripHTML)
-                    case 105: string(body, size).map { m.tags.append($0) }
-                    case 104: if let i = string(body, size).flatMap(cleanISBN) { m.isbn = i }
-                    case 201: coverOffset = u32(body)
-                    case 202: thumbOffset = u32(body)
-                    default: break
-                    }
-                    p += len
-                }
-            }
-        }
-        m.author = authors.map(flipName).joined(separator: " & ")
-
-        if cover, let rel = coverOffset ?? thumbOffset, rel != 0xFFFFFFFF {
-            let idx = firstImage + rel
-            if idx < offsets.count {
-                let start = offsets[idx]
-                let end = idx + 1 < offsets.count ? offsets[idx + 1] : b.count
-                if start < end, end <= b.count { m.cover = Data(b[start..<end]) }
-            }
-        }
-        return m
-    }
-
-    /// Digits (and a trailing X) of a valid-length ISBN, else nil.
-    static func cleanISBN(_ s: String) -> String? {
-        let digits = s.uppercased().filter { $0.isNumber || $0 == "X" }
-        return digits.count == 10 || digits.count == 13 ? digits : nil
-    }
-
-    /// "Bryson, Bill" → "Bill Bryson".
-    static func flipName(_ name: String) -> String {
-        let parts = name.components(separatedBy: ", ")
-        guard parts.count == 2 else { return name }
-        return "\(parts[1]) \(parts[0])"
-    }
-
-    // MARK: PDF
-
-    static func pdf(_ url: URL, cover: Bool = true) -> ExtractedMetadata {
+    private static func pdf(_ url: URL, cover: Bool) -> ExtractedMetadata {
         var m = ExtractedMetadata()
         guard let doc = PDFDocument(url: url) else { return m }
         let attrs = doc.documentAttributes ?? [:]
         m.title = attrs[PDFDocumentAttribute.titleAttribute] as? String
         m.author = attrs[PDFDocumentAttribute.authorAttribute] as? String
         if cover, let page = doc.page(at: 0) {
-            let thumb = page.thumbnail(of: NSSize(width: 600, height: 900), for: .mediaBox)
-            m.cover = jpeg(thumb)
+            m.cover = jpeg(page.thumbnail(of: NSSize(width: 600, height: 900), for: .mediaBox))
         }
         return m
-    }
-
-    static func jpeg(_ image: NSImage) -> Data? {
-        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85])
     }
 }

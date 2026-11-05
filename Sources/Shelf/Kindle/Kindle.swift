@@ -123,7 +123,7 @@ final class Kindle {
                 if url.pathExtension.lowercased() == "sdr" { sdrs.append(url); e?.skipDescendants() }
                 continue
             }
-            guard bookExtensions.contains(url.pathExtension.lowercased()) else { continue }
+            guard Formats.isBook(url.lastPathComponent) else { continue }
             let dir = url.deletingLastPathComponent(), stem = url.deletingPathExtension().lastPathComponent
             stemsByDir[dir, default: []].insert(stem)
             if let id = asin(stem) { asinsByDir[dir, default: []].insert(id) }
@@ -147,7 +147,7 @@ final class Kindle {
             return KindleItem(
                 url: b.url, title: title, author: author, size: b.size, modified: b.modified,
                 sidecars: sdrs.filter { $0.deletingLastPathComponent() == dir && belongs($0, stem: stem, asin: id) },
-                dedupeKey: Book(title: title, author: author, folder: "", files: []).dedupeKey,
+                dedupeKey: Book.dedupeKey(title: title, author: author),
                 isPurchase: id != nil && b.url.path.hasPrefix(purchasesDir))
         }
 
@@ -173,7 +173,7 @@ final class Kindle {
 
     // MARK: Matching library books
 
-    private static func sendName(_ b: Book) -> String { Importer.sanitize("\(b.title) - \(b.author)") }
+    private static func sendName(_ b: Book) -> String { "\(b.title) - \(b.author)".safeFileName }
 
     func contains(_ book: Book) -> Bool {
         connected && (keys.contains(book.dedupeKey) || stems.contains(Kindle.sendName(book).lowercased()))
