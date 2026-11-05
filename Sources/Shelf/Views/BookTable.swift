@@ -6,7 +6,7 @@ struct BookTable<Menu: View>: View {
     let books: [Book]
     @Binding var selection: Set<Book.ID>
     @Binding var sortOrder: [KeyPathComparator<Book>]
-    let open: (Set<Book.ID>) -> Void
+    let edit: (Set<Book.ID>) -> Void
     let menu: (Set<Book.ID>) -> Menu
 
     var body: some View {
@@ -35,7 +35,7 @@ struct BookTable<Menu: View>: View {
         .contextMenu(forSelectionType: Book.ID.self) { ids in
             menu(ids)
         } primaryAction: { ids in
-            open(ids)
+            edit(ids)
         }
     }
 }

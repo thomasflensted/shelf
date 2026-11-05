@@ -87,11 +87,6 @@ final class Library {
         save()
     }
 
-    func open(_ book: Book, file: String? = nil) {
-        guard let f = file ?? book.preferredFiles.first else { return }
-        NSWorkspace.shared.open(fileURL(book, f))
-    }
-
     func reveal(_ books: [Book]) {
         NSWorkspace.shared.activateFileViewerSelecting(books.compactMap { b in b.preferredFiles.first.map { fileURL(b, $0) } })
     }

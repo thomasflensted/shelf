@@ -25,9 +25,9 @@ struct LibraryView: View {
             if library.books.isEmpty {
                 emptyState
             } else if viewMode == .grid {
-                BookGrid(books: visible, selection: $selection, open: open, menu: menu)
+                BookGrid(books: visible, selection: $selection, edit: edit, menu: menu)
             } else {
-                BookTable(books: visible, selection: $selection, sortOrder: $sortOrder, open: open, menu: menu)
+                BookTable(books: visible, selection: $selection, sortOrder: $sortOrder, edit: edit, menu: menu)
             }
         }
         .overlay {
@@ -148,26 +148,19 @@ struct LibraryView: View {
         }
     }
 
-    private func open(_ ids: Set<Book.ID>) {
-        for book in library.books where ids.contains(book.id) { library.open(book) }
+    private func edit(_ ids: Set<Book.ID>) {
+        guard ids.count == 1 else { return }
+        editing = library.books.first { ids.contains($0.id) }
     }
 
     @ViewBuilder
     private func menu(_ ids: Set<Book.ID>) -> some View {
         let books = library.books.filter { ids.contains($0.id) }
         if !books.isEmpty {
-            Button("Open") { open(ids) }
             if books.count == 1, let book = books.first {
-                if book.files.count > 1 {
-                    Menu("Open Format") {
-                        ForEach(book.preferredFiles, id: \.self) { file in
-                            Button(Formats.ext(file).uppercased()) { library.open(book, file: file) }
-                        }
-                    }
-                }
                 Button("Edit…") { editing = book }
+                Divider()
             }
-            Divider()
             Button("Show in Finder") { library.reveal(books) }
             if kindle.connected {
                 Divider()

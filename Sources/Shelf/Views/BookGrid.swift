@@ -5,7 +5,7 @@ struct BookGrid<Menu: View>: View {
     @Environment(Kindle.self) private var kindle
     let books: [Book]
     @Binding var selection: Set<Book.ID>
-    let open: (Set<Book.ID>) -> Void
+    let edit: (Set<Book.ID>) -> Void
     let menu: (Set<Book.ID>) -> Menu
     @State private var anchor: Book.ID?
 
@@ -16,7 +16,7 @@ struct BookGrid<Menu: View>: View {
                     BookCell(book: book, selected: selection.contains(book.id), coverURL: library.coverURL(book),
                              onKindle: kindle.contains(book), kindleName: kindle.name)
                         .contentShape(Rectangle())
-                        .onTapGesture(count: 2) { open([book.id]) }
+                        .onTapGesture(count: 2) { edit([book.id]) }
                         .simultaneousGesture(TapGesture().onEnded { click(book) })
                         .contextMenu { menu(selection.contains(book.id) ? selection : [book.id]) }
                 }

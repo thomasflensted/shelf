@@ -52,8 +52,6 @@ struct KindleView: View {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(items.map(\.url)) }
                 Divider()
                 Button("Remove from Kindle…", role: .destructive) { pendingRemove = items }
-            } primaryAction: { ids in
-                for item in kindle.items where ids.contains(item.id) { NSWorkspace.shared.open(item.url) }
             }
             .overlay {
                 if kindle.scanning && kindle.items.isEmpty {

@@ -28,12 +28,7 @@ struct BookInspector: View {
                     }
                 }
 
-                HStack {
-                    Button("Open") { library.open(book) }.buttonStyle(.borderedProminent)
-                    Button("Edit…", action: edit)
-                    Spacer()
-                }
-                .controlSize(.regular)
+                Button("Edit…", action: edit)
 
                 online
             }
