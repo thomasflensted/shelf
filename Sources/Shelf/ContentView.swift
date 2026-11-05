@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var editing: Book?
     @State private var pendingTrash: Set<Book.ID> = []
     @State private var dropTargeted = false
+    @AppStorage("showInspector") private var showInspector = true
 
     private var visible: [Book] {
         let q = search.trimmingCharacters(in: .whitespaces)
@@ -46,6 +47,9 @@ struct ContentView: View {
         .navigationTitle("Shelf")
         .navigationSubtitle("\(library.books.count) books")
         .toolbar { toolbar }
+        .inspector(isPresented: $showInspector) {
+            inspector.inspectorColumnWidth(min: 260, ideal: 300, max: 440)
+        }
         .sheet(item: $editing) { BookEditor(book: $0) }
         .confirmationDialog(trashPrompt, isPresented: Binding(get: { !pendingTrash.isEmpty }, set: { if !$0 { pendingTrash = [] } })) {
             Button("Move to Trash", role: .destructive) {
@@ -63,6 +67,17 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var inspector: some View {
+        if selection.count == 1, let b = selectedBooks.first {
+            BookInspector(book: b, coverURL: library.coverURL(b)) { editing = b }
+        } else {
+            ContentUnavailableView(selection.isEmpty ? "No Selection" : "\(selection.count) Books Selected",
+                                   systemImage: "book",
+                                   description: Text(selection.isEmpty ? "Click a book to see its details." : ""))
+        }
+    }
+
     private var trashPrompt: String {
         if pendingTrash.count == 1, let b = library.books.first(where: { pendingTrash.contains($0.id) }) {
             return "Move “\(b.title)” to the Trash?"
@@ -76,10 +91,10 @@ struct ContentView: View {
             Button { library.presentAddPanel() } label: { Label("Add Books", systemImage: "plus") }
                 .help("Add books (⌘O) — or drop files onto the window")
 
-            Button { if let b = selectedBooks.first { editing = b } } label: { Label("Info", systemImage: "info.circle") }
-                .keyboardShortcut("i")
+            Button { if let b = selectedBooks.first { editing = b } } label: { Label("Edit", systemImage: "pencil") }
+                .keyboardShortcut("e")
                 .disabled(selection.count != 1)
-                .help("Edit info (⌘I)")
+                .help("Edit title, author, cover… (⌘E)")
 
             if kindle.connected {
                 Button { kindle.send(selectedBooks, from: library) } label: { Label("Send to Kindle", systemImage: "square.and.arrow.down.on.square") }
@@ -105,6 +120,10 @@ struct ContentView: View {
                 }
                 .pickerStyle(.inline)
             } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
+
+            Button { showInspector.toggle() } label: { Label("Info", systemImage: "info.circle") }
+                .keyboardShortcut("i")
+                .help("Show or hide book info (⌘I)")
 
             Picker("View", selection: $viewMode) {
                 Label("Grid", systemImage: "square.grid.2x2").tag("grid")
@@ -183,7 +202,7 @@ struct ContentView: View {
                 }
             }
             if books.count == 1, let b = books.first {
-                Button("Edit Info…") { editing = b }
+                Button("Edit…") { editing = b }
             }
             Divider()
             Button("Show in Finder") { library.reveal(books) }

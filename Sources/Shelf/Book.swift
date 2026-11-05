@@ -8,6 +8,7 @@ struct Book: Codable, Identifiable, Hashable {
     var seriesIndex: Double?
     var tags: [String] = []
     var summary: String?
+    var isbn: String?
     var added = Date()
     /// Folder relative to the library root.
     var folder: String

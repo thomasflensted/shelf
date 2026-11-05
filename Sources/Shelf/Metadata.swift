@@ -9,6 +9,7 @@ struct ExtractedMetadata {
     var seriesIndex: Double?
     var tags: [String] = []
     var summary: String?
+    var isbn: String?
     var cover: Data?
 
     /// Fill gaps in self with values from other.
@@ -18,6 +19,7 @@ struct ExtractedMetadata {
         if series == nil { series = other.series; seriesIndex = other.seriesIndex }
         if tags.isEmpty { tags = other.tags }
         if summary == nil { summary = other.summary }
+        if isbn == nil { isbn = other.isbn }
         if cover == nil { cover = other.cover }
     }
 }
@@ -47,6 +49,12 @@ enum Metadata {
         let creators = root.all("creator")
         let authors = creators.filter { ($0.attrs["role"] ?? "aut") == "aut" }.map(\.text).filter { !$0.isEmpty }
         m.author = (authors.isEmpty ? creators.map(\.text) : authors).joined(separator: " & ")
+        m.isbn = root.all("identifier").lazy.compactMap { id -> String? in
+            let scheme = (id.attrs["scheme"] ?? "").lowercased()
+            let text = id.text.lowercased().replacingOccurrences(of: "urn:isbn:", with: "")
+            guard scheme == "isbn" || id.text.lowercased().hasPrefix("urn:isbn:") else { return nil }
+            return Metadata.cleanISBN(text)
+        }.first
         m.tags = root.all("subject").map(\.text).filter { !$0.isEmpty }
         if let d = root.first("description")?.text, !d.isEmpty { m.summary = stripHTML(d) }
 
@@ -175,6 +183,7 @@ enum Metadata {
                     case 503: if let t = string(body, size), !t.isEmpty { m.title = t }
                     case 103: m.summary = string(body, size).map(stripHTML)
                     case 105: string(body, size).map { m.tags.append($0) }
+                    case 104: if let i = string(body, size).flatMap(cleanISBN) { m.isbn = i }
                     case 201: coverOffset = u32(body)
                     case 202: thumbOffset = u32(body)
                     default: break
@@ -194,6 +203,12 @@ enum Metadata {
             }
         }
         return m
+    }
+
+    /// Digits (and a trailing X) of a valid-length ISBN, else nil.
+    static func cleanISBN(_ s: String) -> String? {
+        let digits = s.uppercased().filter { $0.isNumber || $0 == "X" }
+        return digits.count == 10 || digits.count == 13 ? digits : nil
     }
 
     /// "Bryson, Bill" → "Bill Bryson". Leaves anything more complex alone.

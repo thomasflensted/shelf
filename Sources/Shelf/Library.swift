@@ -192,7 +192,7 @@ enum Importer {
             let title = meta.title?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? ordered[0].deletingPathExtension().lastPathComponent
             let author = meta.author?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Unknown"
             var book = Book(title: title, author: author, series: meta.series, seriesIndex: meta.seriesIndex,
-                            tags: meta.tags, summary: meta.summary, folder: "", files: [])
+                            tags: meta.tags, summary: meta.summary, isbn: meta.isbn, folder: "", files: [])
 
             // Already in library? Add any missing formats to it.
             if var match = byKey[book.dedupeKey] {
