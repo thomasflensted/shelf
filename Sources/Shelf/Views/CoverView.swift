@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CoverView: View {
     let book: Book
-    /// Passed in explicitly: Table cells don't reliably inherit environment objects.
+    // Passed in rather than read from the environment: Table cells don't inherit environment objects and crash.
     let coverURL: URL
     @State private var image: NSImage?
 

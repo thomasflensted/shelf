@@ -10,13 +10,14 @@ struct BookTable<Menu: View>: View {
     let menu: (Set<Book.ID>) -> Menu
 
     var body: some View {
-        // Resolve per-row values here, outside the cells.
         let root = library.root
         let onKindle = Set(books.filter { kindle.contains($0) }.map(\.id))
         Table(books, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Title", value: \.title) { b in
                 HStack(spacing: 8) {
-                    CoverView(book: b, coverURL: root.appendingPathComponent(b.folder).appendingPathComponent("cover.jpg")).frame(width: 20, height: 30).clipShape(RoundedRectangle(cornerRadius: 2))
+                    CoverView(book: b, coverURL: b.coverURL(in: root))
+                        .frame(width: 20, height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
                     Text(b.title)
                 }
             }

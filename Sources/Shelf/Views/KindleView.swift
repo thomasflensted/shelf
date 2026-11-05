@@ -10,15 +10,15 @@ struct KindleView: View {
     @State private var confirmCleanUp = false
 
     private var visible: [KindleItem] {
-        let q = search.trimmingCharacters(in: .whitespaces)
-        let items = q.isEmpty ? kindle.items : kindle.items.filter { "\($0.title) \($0.author)".containsAllWords(of: q) }
+        let query = search.trimmed
+        let items = query.isEmpty ? kindle.items : kindle.items.filter { "\($0.title) \($0.author)".containsAllWords(of: query) }
         return items.sorted(using: sortOrder)
     }
 
     var body: some View {
         let inLibrary = MatchKeys(books: library.books)
         let inShelf: (KindleItem) -> Bool = inLibrary.contains
-        let unbackedUp: (KindleItem) -> Bool = { $0.needsBackup(isInLibrary: inLibrary.contains($0)) }
+        let needsBackup: (KindleItem) -> Bool = { $0.needsBackup(isInLibrary: inLibrary.contains($0)) }
 
         VStack(spacing: 0) {
             header
@@ -45,7 +45,7 @@ struct KindleView: View {
             }
             .contextMenu(forSelectionType: KindleItem.ID.self) { ids in
                 let items = kindle.items.filter { ids.contains($0.id) }
-                let missing = items.filter(unbackedUp)
+                let missing = items.filter(needsBackup)
                 if !missing.isEmpty {
                     Button("Copy to Shelf") { library.importItems(missing.map(\.url)) }
                 }
@@ -65,15 +65,12 @@ struct KindleView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let status = kindle.status ?? library.importStatus {
-                HStack { Text(status); Spacer() }
-                    .font(.callout).foregroundStyle(.secondary)
-                    .padding(.horizontal, 12).frame(height: 26).background(.bar)
-            }
+            StatusBar(message: kindle.feedback.status ?? library.feedback.status,
+                      busy: kindle.feedback.isBusy || library.feedback.isBusy)
         }
         .searchable(text: $search, placement: .toolbar, prompt: "Search \(kindle.name)")
         .navigationTitle(kindle.name)
-        .navigationSubtitle("\(kindle.items.count) books")
+        .navigationSubtitle(counted(kindle.items.count, "book"))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { kindle.rescan() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -88,20 +85,20 @@ struct KindleView: View {
                     .help("Eject \(kindle.name) (⌘E)")
             }
         }
-        .confirmationDialog(removePrompt, isPresented: Binding(get: { !pendingRemove.isEmpty }, set: { if !$0 { pendingRemove = [] } })) {
+        .confirmationDialog(removePrompt, isPresented: Binding(isNotEmpty: $pendingRemove)) {
             Button("Remove", role: .destructive) {
                 kindle.remove(pendingRemove)
                 selection = []
                 pendingRemove = []
             }
         } message: {
-            let notBackedUp = pendingRemove.filter(unbackedUp).count
+            let notBackedUp = pendingRemove.filter(needsBackup).count
             let purchases = pendingRemove.filter(\.isPurchase).count
             Text("This deletes the files and their reading position and highlights from the Kindle."
                  + (purchases > 0 ? " Amazon purchases can be downloaded again from the Kindle's library." : "")
                  + (notBackedUp > 0 ? " \(notBackedUp) of them aren't in your Shelf library. Copy them to Shelf first if you want to keep them." : ""))
         }
-        .confirmationDialog("Remove \(kindle.orphans.count) leftover folders?", isPresented: $confirmCleanUp) {
+        .confirmationDialog("Remove \(counted(kindle.orphans.count, "leftover folder"))?", isPresented: $confirmCleanUp) {
             Button("Clean Up", role: .destructive) { kindle.cleanUp() }
         } message: {
             Text("These .sdr folders hold reading data for books that are no longer on the Kindle.")
@@ -139,7 +136,7 @@ struct KindleView: View {
             if !kindle.orphans.isEmpty {
                 VStack(alignment: .trailing, spacing: 4) {
                     Button("Clean Up…") { confirmCleanUp = true }
-                    Text("\(kindle.orphans.count) leftover folders · \(fmt(kindle.orphanBytes))")
+                    Text("\(counted(kindle.orphans.count, "leftover folder")) · \(fmt(kindle.orphanBytes))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

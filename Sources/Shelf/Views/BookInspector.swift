@@ -73,9 +73,7 @@ struct BookInspector: View {
     private func found(_ i: BookInfo) -> some View {
         if let r = i.rating, r > 0 {
             HStack(spacing: 2) {
-                ForEach(0..<5) { n in
-                    Image(systemName: Double(n) + 0.75 <= r ? "star.fill" : Double(n) + 0.25 <= r ? "star.leadinghalf.filled" : "star")
-                }
+                ForEach(Array(RatingStars.symbols(for: r).enumerated()), id: \.offset) { Image(systemName: $0.element) }
                 Text(String(format: " %.1f", r)).monospacedDigit()
                 if let c = i.ratingsCount { Text("(\(c) ratings)").foregroundStyle(.secondary) }
             }

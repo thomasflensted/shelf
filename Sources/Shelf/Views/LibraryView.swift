@@ -5,16 +5,16 @@ struct LibraryView: View {
     @Environment(Kindle.self) private var kindle
     @State private var search = ""
     @State private var selection = Set<Book.ID>()
-    @State private var sortOrder = [KeyPathComparator(\Book.added, order: .reverse)]
-    @AppStorage("viewMode") private var viewMode = "grid"
-    @State private var editing: Book?
-    @State private var pendingTrash: Set<Book.ID> = []
-    @State private var dropTargeted = false
+    @State private var sortOrder = SortOption.added.comparators
+    @AppStorage("viewMode") private var viewMode = ViewMode.grid
     @AppStorage("showInspector") private var showInspector = true
+    @State private var editing: Book?
+    @State private var pendingTrash: [Book.ID] = []
+    @State private var dropTargeted = false
 
     private var visible: [Book] {
-        let q = search.trimmingCharacters(in: .whitespaces)
-        let filtered = q.isEmpty ? library.books : library.books.filter { $0.matches(q) }
+        let query = search.trimmed
+        let filtered = query.isEmpty ? library.books : library.books.filter { $0.matches(query) }
         return filtered.sorted(using: sortOrder)
     }
 
@@ -24,7 +24,7 @@ struct LibraryView: View {
         Group {
             if library.books.isEmpty {
                 emptyState
-            } else if viewMode == "grid" {
+            } else if viewMode == .grid {
                 BookGrid(books: visible, selection: $selection, open: open, menu: menu)
             } else {
                 BookTable(books: visible, selection: $selection, sortOrder: $sortOrder, open: open, menu: menu)
@@ -42,35 +42,40 @@ struct LibraryView: View {
             library.importItems(urls)
             return true
         } isTargeted: { dropTargeted = $0 }
-        .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            StatusBar(message: statusMessage, busy: library.feedback.isBusy || kindle.feedback.isBusy)
+        }
         .searchable(text: $search, placement: .toolbar, prompt: "Title, author, series, tag")
         .navigationTitle("Shelf")
-        .navigationSubtitle("\(library.books.count) books")
+        .navigationSubtitle(counted(library.books.count, "book"))
         .toolbar { toolbar }
         .inspector(isPresented: $showInspector) {
             inspector.inspectorColumnWidth(min: 260, ideal: 300, max: 440)
         }
         .sheet(item: $editing) { BookEditor(book: $0) }
-        .confirmationDialog(trashPrompt, isPresented: Binding(get: { !pendingTrash.isEmpty }, set: { if !$0 { pendingTrash = [] } })) {
+        .confirmationDialog(trashPrompt, isPresented: Binding(isNotEmpty: $pendingTrash)) {
             Button("Move to Trash", role: .destructive) {
-                library.trash(pendingTrash)
+                library.trash(Set(pendingTrash))
                 selection.subtract(pendingTrash)
                 pendingTrash = []
             }
         } message: {
             Text("The book files will be moved to the Trash.")
         }
-        .alert("Something went wrong", isPresented: Binding(get: { library.lastError != nil }, set: { if !$0 { library.lastError = nil } })) {
-            Button("OK") { library.lastError = nil }
-        } message: {
-            Text(library.lastError ?? "")
-        }
+        .errorAlert("Something went wrong", library.feedback)
+    }
+
+    private var statusMessage: String? {
+        if let status = library.feedback.status ?? kindle.feedback.status { return status }
+        if !search.isEmpty { return "\(visible.count) of \(counted(library.books.count, "book"))" }
+        if !selection.isEmpty { return "\(selection.count) selected" }
+        return nil
     }
 
     @ViewBuilder
     private var inspector: some View {
-        if selection.count == 1, let b = selectedBooks.first {
-            BookInspector(book: b, coverURL: library.coverURL(b)) { editing = b }
+        if selection.count == 1, let book = selectedBooks.first {
+            BookInspector(book: book, coverURL: library.coverURL(book)) { editing = book }
         } else {
             ContentUnavailableView(selection.isEmpty ? "No Selection" : "\(selection.count) Books Selected",
                                    systemImage: "book",
@@ -79,8 +84,8 @@ struct LibraryView: View {
     }
 
     private var trashPrompt: String {
-        if pendingTrash.count == 1, let b = library.books.first(where: { pendingTrash.contains($0.id) }) {
-            return "Move “\(b.title)” to the Trash?"
+        if pendingTrash.count == 1, let book = library.books.first(where: { $0.id == pendingTrash[0] }) {
+            return "Move “\(book.title)” to the Trash?"
         }
         return "Move \(pendingTrash.count) books to the Trash?"
     }
@@ -91,32 +96,28 @@ struct LibraryView: View {
             Button { library.presentAddPanel() } label: { Label("Add Books", systemImage: "plus") }
                 .help("Add books (⌘O) — or drop files onto the window")
 
-            Button { if let b = selectedBooks.first { editing = b } } label: { Label("Edit", systemImage: "pencil") }
+            Button { editing = selectedBooks.first } label: { Label("Edit", systemImage: "pencil") }
                 .keyboardShortcut("e")
                 .disabled(selection.count != 1)
                 .help("Edit title, author, cover… (⌘E)")
 
             if kindle.connected {
-                Button { kindle.send(selectedBooks, from: library) } label: { Label("Send to Kindle", systemImage: "square.and.arrow.down.on.square") }
-                    .keyboardShortcut("k")
-                    .disabled(selection.isEmpty)
-                    .help("Copy selected books to \(kindle.name) (⌘K)")
+                Button { kindle.send(selectedBooks, from: library) } label: {
+                    Label("Send to Kindle", systemImage: "square.and.arrow.down.on.square")
+                }
+                .keyboardShortcut("k")
+                .disabled(selection.isEmpty)
+                .help("Copy selected books to \(kindle.name) (⌘K)")
             }
 
-            Button { pendingTrash = selection } label: { Label("Move to Trash", systemImage: "trash") }
+            Button { pendingTrash = Array(selection) } label: { Label("Move to Trash", systemImage: "trash") }
                 .keyboardShortcut(.delete)
                 .disabled(selection.isEmpty)
                 .help("Move to Trash (⌘⌫)")
 
             Menu {
-                Picker("Sort By", selection: Binding(
-                    get: { sortKey },
-                    set: { setSort($0) }
-                )) {
-                    Text("Recently Added").tag("added")
-                    Text("Title").tag("title")
-                    Text("Author").tag("author")
-                    Text("Series").tag("series")
+                Picker("Sort By", selection: Binding(get: { SortOption(sortOrder) }, set: { sortOrder = $0.comparators })) {
+                    ForEach(SortOption.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.inline)
             } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
@@ -126,49 +127,11 @@ struct LibraryView: View {
                 .help("Show or hide book info (⌘I)")
 
             Picker("View", selection: $viewMode) {
-                Label("Grid", systemImage: "square.grid.2x2").tag("grid")
-                Label("List", systemImage: "list.bullet").tag("list")
+                Label("Grid", systemImage: "square.grid.2x2").tag(ViewMode.grid)
+                Label("List", systemImage: "list.bullet").tag(ViewMode.list)
             }
             .pickerStyle(.segmented)
         }
-    }
-
-    private var sortKey: String {
-        switch sortOrder.first?.keyPath {
-        case \Book.title: "title"
-        case \Book.authorSort: "author"
-        case \Book.seriesSort: "series"
-        default: "added"
-        }
-    }
-
-    private func setSort(_ key: String) {
-        switch key {
-        case "title": sortOrder = [KeyPathComparator(\Book.title)]
-        case "author": sortOrder = [KeyPathComparator(\Book.authorSort), KeyPathComparator(\Book.title)]
-        case "series": sortOrder = [KeyPathComparator(\Book.seriesSort), KeyPathComparator(\Book.title)]
-        default: sortOrder = [KeyPathComparator(\Book.added, order: .reverse)]
-        }
-    }
-
-    private var statusBar: some View {
-        HStack {
-            if let status = library.importStatus ?? kindle.status {
-                if status.hasPrefix("Importing") || status.hasPrefix("Sending") { ProgressView().controlSize(.small) }
-                Text(status)
-            } else if !search.isEmpty {
-                Text("\(visible.count) of \(library.books.count) books")
-            } else if !selection.isEmpty {
-                Text("\(selection.count) selected")
-            }
-            Spacer()
-        }
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .frame(height: library.importStatus == nil && kindle.status == nil && search.isEmpty && selection.isEmpty ? 0 : 26)
-        .clipped()
-        .background(.bar)
     }
 
     private var emptyState: some View {
@@ -178,15 +141,15 @@ struct LibraryView: View {
             Text("Drop ebook files or folders here, or add them with ⌘O.")
         } actions: {
             Button("Add Books…") { library.presentAddPanel() }
-            if FileManager.default.fileExists(atPath: Library.calibreRoot.path) {
-                Button("Import Calibre Library") { library.importItems([Library.calibreRoot]) }
+            if library.hasCalibreLibrary {
+                Button("Import Calibre Library") { library.importCalibreLibrary() }
                     .buttonStyle(.borderedProminent)
             }
         }
     }
 
     private func open(_ ids: Set<Book.ID>) {
-        for b in library.books where ids.contains(b.id) { library.open(b) }
+        for book in library.books where ids.contains(book.id) { library.open(book) }
     }
 
     @ViewBuilder
@@ -194,15 +157,15 @@ struct LibraryView: View {
         let books = library.books.filter { ids.contains($0.id) }
         if !books.isEmpty {
             Button("Open") { open(ids) }
-            if books.count == 1, let b = books.first, b.files.count > 1 {
-                Menu("Open Format") {
-                    ForEach(b.preferredFiles, id: \.self) { f in
-                        Button((f as NSString).pathExtension.uppercased()) { library.open(b, file: f) }
+            if books.count == 1, let book = books.first {
+                if book.files.count > 1 {
+                    Menu("Open Format") {
+                        ForEach(book.preferredFiles, id: \.self) { file in
+                            Button(Formats.ext(file).uppercased()) { library.open(book, file: file) }
+                        }
                     }
                 }
-            }
-            if books.count == 1, let b = books.first {
-                Button("Edit…") { editing = b }
+                Button("Edit…") { editing = book }
             }
             Divider()
             Button("Show in Finder") { library.reveal(books) }
@@ -215,7 +178,7 @@ struct LibraryView: View {
                 }
             }
             Divider()
-            Button("Move to Trash…", role: .destructive) { pendingTrash = ids }
+            Button("Move to Trash…", role: .destructive) { pendingTrash = Array(ids) }
         }
     }
 }

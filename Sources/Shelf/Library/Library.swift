@@ -7,8 +7,7 @@ import Observation
 final class Library {
     private(set) var root: URL
     private(set) var books: [Book] = []
-    var importStatus: String?
-    var lastError: String?
+    let feedback = Feedback()
 
     static let defaultRoot = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Books")
     static let calibreRoot = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Calibre Library")
@@ -21,6 +20,8 @@ final class Library {
         }
         load()
     }
+
+    var hasCalibreLibrary: Bool { FileManager.default.fileExists(atPath: Library.calibreRoot.path) }
 
     private var indexURL: URL { root.appendingPathComponent("library.json") }
 
@@ -42,7 +43,7 @@ final class Library {
         do {
             try encoder.encode(books).write(to: indexURL, options: .atomic)
         } catch {
-            lastError = "Couldn't save library: \(error.localizedDescription)"
+            feedback.fail(["Couldn't save library: \(error.localizedDescription)"])
         }
     }
 
@@ -68,7 +69,7 @@ final class Library {
                 b.hasCover = true
                 b.coverVersion += 1
             } catch {
-                lastError = "Couldn't save cover: \(error.localizedDescription)"
+                feedback.fail(["Couldn't save cover: \(error.localizedDescription)"])
             }
         }
         books[i] = b
@@ -105,24 +106,25 @@ final class Library {
         importItems(panel.urls)
     }
 
+    func importCalibreLibrary() { importItems([Library.calibreRoot]) }
+
     func importItems(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         let root = self.root
         let existing = books
-        importStatus = "Importing…"
+        feedback.progress("Importing…")
         Task {
             let result = await Task.detached(priority: .userInitiated) {
                 Importer.run(urls: urls, root: root, existing: existing) { done, total in
-                    Task { @MainActor in self.importStatus = "Importing \(done) of \(total)…" }
+                    Task { @MainActor in self.feedback.progress("Importing \(done) of \(total)…") }
                 }
             }.value
-            for b in result.books {
-                if let i = books.firstIndex(where: { $0.id == b.id }) { books[i] = b } else { books.append(b) }
+            for book in result.books {
+                if let i = books.firstIndex(where: { $0.id == book.id }) { books[i] = book } else { books.append(book) }
             }
             save()
-            importStatus = result.summary
-            if !result.errors.isEmpty { lastError = result.errors.prefix(5).joined(separator: "\n") }
-            clearStatusSoon()
+            feedback.done(result.summary)
+            feedback.fail(Array(result.errors.prefix(5)))
         }
     }
 
@@ -131,13 +133,5 @@ final class Library {
               (try? FileManager.default.contentsOfDirectory(atPath: authorFolder.path))?.allSatisfy({ $0.hasPrefix(".") }) == true
         else { return }
         try? FileManager.default.removeItem(at: authorFolder)
-    }
-
-    private func clearStatusSoon() {
-        let current = importStatus
-        Task {
-            try? await Task.sleep(for: .seconds(6))
-            if importStatus == current { importStatus = nil }
-        }
     }
 }

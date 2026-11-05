@@ -68,7 +68,7 @@ struct BookEditor: View {
                     LabeledContent("Files") {
                         HStack {
                             ForEach(book.preferredFiles, id: \.self) { f in
-                                Button((f as NSString).pathExtension.uppercased()) { library.open(book, file: f) }
+                                Button(Formats.ext(f).uppercased()) { library.open(book, file: f) }
                                     .controlSize(.small)
                                     .help("Open \(f)")
                             }

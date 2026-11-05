@@ -30,10 +30,6 @@ struct RootView: View {
             withAnimation { columns = connected ? .all : .detailOnly }
             if !connected { source = .library }
         }
-        .alert("Kindle", isPresented: Binding(get: { kindle.lastError != nil }, set: { if !$0 { kindle.lastError = nil } })) {
-            Button("OK") { kindle.lastError = nil }
-        } message: {
-            Text(kindle.lastError ?? "")
-        }
+        .errorAlert("Kindle", kindle.feedback)
     }
 }

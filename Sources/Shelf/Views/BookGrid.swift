@@ -28,17 +28,8 @@ struct BookGrid<Menu: View>: View {
     }
 
     private func click(_ book: Book) {
-        let mods = NSEvent.modifierFlags
-        if mods.contains(.command) {
-            if selection.contains(book.id) { selection.remove(book.id) } else { selection.insert(book.id) }
-            anchor = book.id
-        } else if mods.contains(.shift), let anchor,
-                  let a = books.firstIndex(where: { $0.id == anchor }),
-                  let b = books.firstIndex(where: { $0.id == book.id }) {
-            selection = Set(books[min(a, b)...max(a, b)].map(\.id))
-        } else {
-            selection = [book.id]
-            anchor = book.id
-        }
+        let modifiers = NSEvent.modifierFlags
+        (selection, anchor) = GridSelection.click(book.id, in: books.map(\.id), selection: selection, anchor: anchor,
+                                                  command: modifiers.contains(.command), shift: modifiers.contains(.shift))
     }
 }

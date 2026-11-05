@@ -20,8 +20,8 @@ struct ShelfApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Add Books…") { library.presentAddPanel() }
                     .keyboardShortcut("o")
-                if FileManager.default.fileExists(atPath: Library.calibreRoot.path) {
-                    Button("Import Calibre Library") { library.importItems([Library.calibreRoot]) }
+                if library.hasCalibreLibrary {
+                    Button("Import Calibre Library") { library.importCalibreLibrary() }
                 }
                 Divider()
                 Button("Choose Library Folder…") { library.chooseLibraryFolder() }

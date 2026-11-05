@@ -12,8 +12,7 @@ final class Kindle {
     private(set) var totalBytes: Int64 = 0
     private(set) var freeBytes: Int64 = 0
     private(set) var scanning = false
-    var status: String?
-    var lastError: String?
+    let feedback = Feedback()
 
     private var onDevice = MatchKeys(items: [])
 
@@ -53,7 +52,7 @@ final class Kindle {
             self.volume = nil
             apply(KindleScanner.Result())
         } catch {
-            lastError = "Couldn't eject: \(error.localizedDescription)"
+            feedback.fail(["Couldn't eject: \(error.localizedDescription)"])
         }
     }
 
@@ -77,7 +76,7 @@ final class Kindle {
     }
 
     func send(_ books: [Book], from library: Library) {
-        guard let documents else { lastError = "No Kindle connected."; return }
+        guard let documents else { return }
         let skipped = books.filter { Formats.best(of: $0.files, in: Formats.kindleOrder) == nil }.map(\.title)
         let jobs = books.compactMap { book -> (from: URL, to: URL)? in
             guard let file = Formats.best(of: book.files, in: Formats.kindleOrder) else { return nil }
@@ -85,17 +84,14 @@ final class Kindle {
             return (library.fileURL(book, file), documents.appendingPathComponent(name))
         }
         guard !jobs.isEmpty else {
-            lastError = "No Kindle-compatible format (AZW3, MOBI, PDF…) for: " + skipped.joined(separator: ", ")
+            feedback.fail(["No Kindle-compatible format (AZW3, MOBI, PDF…) for: " + skipped.joined(separator: ", ")])
             return
         }
-        status = "Sending \(counted(jobs.count, "book"))…"
+        feedback.progress("Sending \(counted(jobs.count, "book"))…")
         Task {
             let failures = await Task.detached(priority: .userInitiated) { Kindle.copy(jobs) }.value
-            status = "Sent \(counted(jobs.count - failures.count, "book")) to \(name)"
-            var problems = failures
-            if !skipped.isEmpty { problems.append("No Kindle-compatible format for: " + skipped.joined(separator: ", ")) }
-            if !problems.isEmpty { lastError = problems.joined(separator: "\n") }
-            clearStatusSoon()
+            feedback.done("Sent \(counted(jobs.count - failures.count, "book")) to \(name)")
+            feedback.fail(failures + (skipped.isEmpty ? [] : ["No Kindle-compatible format for: " + skipped.joined(separator: ", ")]))
             rescan()
         }
     }
@@ -111,17 +107,15 @@ final class Kindle {
                 failures.append("\(item.title): \(error.localizedDescription)")
             }
         }
-        if !failures.isEmpty { lastError = failures.joined(separator: "\n") }
-        status = "Removed \(counted(remove.count - failures.count, "book")) from \(name)"
-        clearStatusSoon()
+        feedback.done("Removed \(counted(remove.count - failures.count, "book")) from \(name)")
+        feedback.fail(failures)
         rescan()
     }
 
     func cleanUp() {
         let count = orphans.count, bytes = orphanBytes
         for sdr in orphans { try? FileManager.default.removeItem(at: sdr) }
-        status = "Removed \(counted(count, "leftover folder")), freed \(bytes.formatted(.byteCount(style: .file)))"
-        clearStatusSoon()
+        feedback.done("Removed \(counted(count, "leftover folder")), freed \(bytes.formatted(.byteCount(style: .file)))")
         rescan()
     }
 
@@ -150,13 +144,5 @@ final class Kindle {
         else { return }
         totalBytes = Int64(values.volumeTotalCapacity ?? 0)
         freeBytes = Int64(values.volumeAvailableCapacity ?? 0)
-    }
-
-    private func clearStatusSoon() {
-        let current = status
-        Task {
-            try? await Task.sleep(for: .seconds(6))
-            if status == current { status = nil }
-        }
     }
 }
