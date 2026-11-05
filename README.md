@@ -33,3 +33,11 @@ Requires macOS 14+ and Xcode command line tools.
 ```
 
 This builds a release binary, wraps it in `Shelf.app`, ad-hoc signs it and installs it to `~/Applications`.
+
+## Tests
+
+```
+swift test
+```
+
+They run on every pull request and push to `main` via GitHub Actions.
