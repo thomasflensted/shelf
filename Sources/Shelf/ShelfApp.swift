@@ -1,0 +1,32 @@
+import SwiftUI
+
+@main
+struct ShelfApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var library = Library()
+
+    var body: some Scene {
+        Window("Shelf", id: "main") {
+            ContentView()
+                .environment(library)
+                .frame(minWidth: 640, minHeight: 420)
+        }
+        .defaultSize(width: 1000, height: 700)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Add Books…") { library.presentAddPanel() }
+                    .keyboardShortcut("o")
+                if FileManager.default.fileExists(atPath: Library.calibreRoot.path) {
+                    Button("Import Calibre Library") { library.importItems([Library.calibreRoot]) }
+                }
+                Divider()
+                Button("Choose Library Folder…") { library.chooseLibraryFolder() }
+                Button("Show Library in Finder") { NSWorkspace.shared.open(library.root) }
+            }
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
