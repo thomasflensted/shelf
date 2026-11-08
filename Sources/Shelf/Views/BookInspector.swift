@@ -16,8 +16,7 @@ struct BookInspector: View {
                 CoverView(book: book, coverURL: coverURL)
                     .aspectRatio(2 / 3, contentMode: .fit)
                     .frame(maxWidth: 170)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    .coverStyle()
                     .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 3) {

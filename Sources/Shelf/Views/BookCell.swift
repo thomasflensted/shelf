@@ -11,8 +11,7 @@ struct BookCell: View {
         VStack(alignment: .leading, spacing: 6) {
             CoverView(book: book, coverURL: coverURL)
                 .aspectRatio(2 / 3, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .shadow(color: .black.opacity(0.18), radius: 3, y: 2)
+                .coverStyle()
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
                         .strokeBorder(Color.accentColor, lineWidth: selected ? 3 : 0)

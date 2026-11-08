@@ -9,8 +9,7 @@ A barebones native macOS ebook library: a small replacement for the parts of Cal
 - Reads title, author, cover and ISBN from EPUB, MOBI/AZW3 and PDF files
 - File → Import Calibre Library copies `~/Calibre Library` in, keeping metadata, covers and all formats. The original is never modified.
 - Info panel (⌘I): details, rating, description and subjects from [Open Library](https://openlibrary.org), with Google Books filling gaps when it responds. No API keys needed.
-- Edit title, author, series, tags, description and cover (⌘E)
-- Double-click to open a book in your default reader
+- Edit title, author, description and cover with ⌘E or by double-clicking a book
 - Books live in plain folders: `~/Books/Author/Title/` plus `library.json` (change it with File → Choose Library Folder…)
 
 ## Kindle

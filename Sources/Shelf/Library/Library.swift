@@ -53,20 +53,24 @@ final class Library {
         load()
     }
 
-    func update(_ book: Book, newCover: URL? = nil) {
+    func update(_ book: Book) {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
-        var b = book
-        if let newCover, let image = NSImage(contentsOf: newCover), let jpeg = Metadata.jpeg(image) {
-            do {
-                try jpeg.write(to: coverURL(b), options: .atomic)
-                b.hasCover = true
-                b.coverVersion += 1
-            } catch {
-                feedback.fail(["Couldn't save cover: \(error.localizedDescription)"])
-            }
-        }
-        books[i] = b
+        books[i] = book
         save()
+    }
+
+    func writeCover(_ image: NSImage, for book: Book) -> Book {
+        guard let jpeg = Metadata.jpeg(image) else { return book }
+        do {
+            try jpeg.write(to: coverURL(book), options: .atomic)
+        } catch {
+            feedback.fail(["Couldn't save cover: \(error.localizedDescription)"])
+            return book
+        }
+        var updated = book
+        updated.hasCover = true
+        updated.coverVersion += 1
+        return updated
     }
 
     func trash(_ ids: Set<Book.ID>) {

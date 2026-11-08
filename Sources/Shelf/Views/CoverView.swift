@@ -38,3 +38,9 @@ struct CoverView: View {
         }
     }
 }
+
+extension View {
+    func coverStyle() -> some View {
+        clipShape(RoundedRectangle(cornerRadius: 4)).shadow(color: .black.opacity(0.2), radius: 3, y: 2)
+    }
+}

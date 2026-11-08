@@ -8,8 +8,7 @@ struct BookEditor: View {
     @State private var title: String
     @State private var author: String
     @State private var summary: String
-    @State private var newCover: URL?
-    @State private var newCoverImage: NSImage?
+    @State private var newCover: NSImage?
 
     init(book: Book) {
         self.book = book
@@ -40,15 +39,14 @@ struct BookEditor: View {
     private var cover: some View {
         VStack(spacing: 8) {
             Group {
-                if let newCoverImage {
-                    Image(nsImage: newCoverImage).resizable().aspectRatio(contentMode: .fill)
+                if let newCover {
+                    Image(nsImage: newCover).resizable().aspectRatio(contentMode: .fill)
                 } else {
                     CoverView(book: book, coverURL: library.coverURL(book))
                 }
             }
             .frame(width: 160, height: 240)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .shadow(radius: 3, y: 2)
+            .coverStyle()
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first else { return false }
                 return useCover(url)
@@ -99,8 +97,7 @@ struct BookEditor: View {
 
     private func useCover(_ url: URL) -> Bool {
         guard let image = NSImage(contentsOf: url) else { return false }
-        newCover = url
-        newCoverImage = image
+        newCover = image
         return true
     }
 
@@ -109,7 +106,8 @@ struct BookEditor: View {
         edited.title = title.trimmed.nonEmpty ?? book.title
         edited.author = author.trimmed.nonEmpty ?? Book.unknownAuthor
         edited.summary = summary.trimmed.nonEmpty
-        library.update(edited, newCover: newCover)
+        if let newCover { edited = library.writeCover(newCover, for: edited) }
+        library.update(edited)
         dismiss()
     }
 }
