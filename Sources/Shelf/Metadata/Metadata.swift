@@ -107,7 +107,7 @@ enum Metadata {
               let opfPath = XMLTree.parse(container)?.first("rootfile")?.attrs["full-path"],
               let opfData = unzip(url, opfPath)
         else { return ExtractedMetadata() }
-        let base = (opfPath as NSString).deletingLastPathComponent
+        let base = opfPath.split(separator: "/").dropLast().joined(separator: "/")
         return opf(opfData, baseDir: base, coverLoader: cover ? { unzip(url, $0) } : nil)
     }
 

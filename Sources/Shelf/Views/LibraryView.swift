@@ -93,7 +93,7 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { library.presentAddPanel() } label: { Label("Add Books", systemImage: "plus") }
+            Button { library.importItems(Panels.chooseBooks()) } label: { Label("Add Books", systemImage: "plus") }
                 .help("Add books (⌘O) — or drop files onto the window")
 
             Button { editing = selectedBooks.first } label: { Label("Edit", systemImage: "pencil") }
@@ -140,7 +140,7 @@ struct LibraryView: View {
         } description: {
             Text("Drop ebook files or folders here, or add them with ⌘O.")
         } actions: {
-            Button("Add Books…") { library.presentAddPanel() }
+            Button("Add Books…") { library.importItems(Panels.chooseBooks()) }
             if library.hasCalibreLibrary {
                 Button("Import Calibre Library") { library.importCalibreLibrary() }
                     .buttonStyle(.borderedProminent)

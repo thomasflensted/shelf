@@ -77,21 +77,18 @@ final class Kindle {
 
     func send(_ books: [Book], from library: Library) {
         guard let documents else { return }
-        let skipped = books.filter { Formats.best(of: $0.files, in: Formats.kindleOrder) == nil }.map(\.title)
-        let jobs = books.compactMap { book -> (from: URL, to: URL)? in
-            guard let file = Formats.best(of: book.files, in: Formats.kindleOrder) else { return nil }
-            let name = KindleFiles.fileStem(for: book) + "." + Formats.ext(file)
-            return (library.fileURL(book, file), documents.appendingPathComponent(name))
+        let (sendable, skipped) = KindleFiles.sendable(books)
+        let noFormat = skipped.isEmpty ? [] : ["No Kindle-compatible format (AZW3, MOBI, PDF…) for: " + skipped.map(\.title).joined(separator: ", ")]
+        let jobs = sendable.map { book, file in
+            (from: library.fileURL(book, file),
+             to: documents.appendingPathComponent(KindleFiles.fileStem(for: book) + "." + Formats.ext(file)))
         }
-        guard !jobs.isEmpty else {
-            feedback.fail(["No Kindle-compatible format (AZW3, MOBI, PDF…) for: " + skipped.joined(separator: ", ")])
-            return
-        }
+        guard !jobs.isEmpty else { feedback.fail(noFormat); return }
         feedback.progress("Sending \(counted(jobs.count, "book"))…")
         Task {
             let failures = await Task.detached(priority: .userInitiated) { Kindle.copy(jobs) }.value
             feedback.done("Sent \(counted(jobs.count - failures.count, "book")) to \(name)")
-            feedback.fail(failures + (skipped.isEmpty ? [] : ["No Kindle-compatible format for: " + skipped.joined(separator: ", ")]))
+            feedback.fail(failures + noFormat)
             rescan()
         }
     }

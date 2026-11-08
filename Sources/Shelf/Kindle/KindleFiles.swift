@@ -19,6 +19,15 @@ enum KindleFiles {
 
     static func fileStem(for book: Book) -> String { "\(book.title) - \(book.author)".safeFileName }
 
+    static func sendable(_ books: [Book]) -> (files: [(book: Book, file: String)], skipped: [Book]) {
+        var files: [(book: Book, file: String)] = []
+        var skipped: [Book] = []
+        for book in books {
+            if let file = Formats.best(of: book.files, in: Formats.kindleOrder) { files.append((book, file)) } else { skipped.append(book) }
+        }
+        return (files, skipped)
+    }
+
     // Amazon books often have a second, short-named sidecar ("Title_ASIN.sdr") next to the full-named one.
     static func sidecar(_ sdrStem: String, belongsTo bookStem: String) -> Bool {
         sdrStem == bookStem || (asin(bookStem) != nil && asin(sdrStem) == asin(bookStem))

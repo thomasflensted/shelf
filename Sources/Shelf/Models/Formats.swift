@@ -5,7 +5,7 @@ enum Formats {
     static let readingOrder = ["epub", "azw3", "mobi", "azw", "pdf", "cbz", "cbr", "fb2", "djvu", "txt", "rtf"]
     static let kindleOrder = ["azw3", "mobi", "azw", "kfx", "pdf", "txt"]
 
-    static func ext(_ fileName: String) -> String { (fileName as NSString).pathExtension.lowercased() }
+    static func ext(_ fileName: String) -> String { URL(filePath: fileName, directoryHint: .notDirectory).pathExtension.lowercased() }
 
     static func isBook(_ fileName: String) -> Bool { all.contains(ext(fileName)) }
 

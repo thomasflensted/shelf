@@ -42,21 +42,25 @@ struct BookInspector: View {
 
     @ViewBuilder
     private var online: some View {
-        switch info.state(for: book) {
-        case .found(let i):
+        let state = info.state(for: book)
+        if case .found(let i) = state {
             found(i)
-        case .notFound:
+        } else {
             facts(nil)
             description(nil)
-            message("Not found on Open Library.", retry: true)
+            lookupStatus(state)
+        }
+    }
+
+    @ViewBuilder
+    private func lookupStatus(_ state: LookupState?) -> some View {
+        switch state {
+        case .notFound:
+            message("Not found on Open Library.")
             links(nil)
         case .failed(let error):
-            facts(nil)
-            description(nil)
-            message("Couldn't look this book up: \(error)", retry: true)
-        case .loading, nil:
-            facts(nil)
-            description(nil)
+            message("Couldn't look this book up: \(error)")
+        default:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Looking up…").foregroundStyle(.secondary)
@@ -132,13 +136,11 @@ struct BookInspector: View {
         }
     }
 
-    private func message(_ text: String, retry: Bool) -> some View {
+    private func message(_ text: String) -> some View {
         HStack {
             Text(text).font(.callout).foregroundStyle(.secondary)
-            if retry {
-                Button("Retry") { info.load(book, files: files, force: true) }
+            Button("Retry") { info.load(book, files: files, force: true) }
                 .buttonStyle(.link)
-            }
         }
     }
 

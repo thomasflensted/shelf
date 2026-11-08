@@ -47,16 +47,9 @@ final class Library {
         }
     }
 
-    func chooseLibraryFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Use as Library"
-        panel.message = "Choose a folder to keep your books in. An existing Shelf library will be opened."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        root = url
-        UserDefaults.standard.set(url.path, forKey: "libraryPath")
+    func open(_ folder: URL) {
+        root = folder
+        UserDefaults.standard.set(folder.path, forKey: "libraryPath")
         load()
     }
 
@@ -89,16 +82,6 @@ final class Library {
 
     func reveal(_ books: [Book]) {
         NSWorkspace.shared.activateFileViewerSelecting(books.compactMap { b in b.preferredFiles.first.map { fileURL(b, $0) } })
-    }
-
-    func presentAddPanel() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = true
-        panel.message = "Choose books, or a folder (such as a Calibre library) to import everything in it."
-        panel.prompt = "Add"
-        guard panel.runModal() == .OK else { return }
-        importItems(panel.urls)
     }
 
     func importCalibreLibrary() { importItems([Library.calibreRoot]) }

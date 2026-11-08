@@ -93,11 +93,7 @@ enum Importer {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
             guard isDir.boolValue else { consider(url); continue }
-            let walker = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey],
-                                       options: [.skipsHiddenFiles, .skipsPackageDescendants])
-            while let file = walker?.nextObject() as? URL {
-                if (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { consider(file) }
-            }
+            for file in fm.contentsRecursively(of: url) where !file.isDirectory { consider(file) }
         }
         return calibreFolders.values.sorted { $0.files[0].path < $1.files[0].path } + loose.map { Candidate(files: [$0]) }
     }

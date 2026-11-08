@@ -18,13 +18,15 @@ struct ShelfApp: App {
         .defaultSize(width: 1000, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Add Books…") { library.presentAddPanel() }
+                Button("Add Books…") { library.importItems(Panels.chooseBooks()) }
                     .keyboardShortcut("o")
                 if library.hasCalibreLibrary {
                     Button("Import Calibre Library") { library.importCalibreLibrary() }
                 }
                 Divider()
-                Button("Choose Library Folder…") { library.chooseLibraryFolder() }
+                Button("Choose Library Folder…") {
+                    if let folder = Panels.chooseLibraryFolder() { library.open(folder) }
+                }
                 Button("Show Library in Finder") { NSWorkspace.shared.open(library.root) }
             }
         }

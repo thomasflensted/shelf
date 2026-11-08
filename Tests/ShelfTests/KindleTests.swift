@@ -16,6 +16,16 @@ struct KindleFilesTests {
         #expect(KindleFiles.prettyTitle("Empire of AI_B0DW49YMRL_sample") == "Empire of AI (sample)")
     }
 
+    @Test func sendablePicksBestKindleFormatAndSkipsBooksWithout() {
+        let mixed = makeBook(title: "Mixed", files: ["m.epub", "m.pdf", "m.azw3"])
+        let epubOnly = makeBook(title: "EPUB only", files: ["e.epub"])
+
+        let (files, skipped) = KindleFiles.sendable([mixed, epubOnly])
+
+        #expect(files.map(\.file) == ["m.azw3"])
+        #expect(skipped.map(\.title) == ["EPUB only"])
+    }
+
     @Test func shortNamedSidecarBelongsToFullNamedBook() {
         let book = "The Sympathizer_ A Novel_B00PSSG4MM"
         #expect(KindleFiles.sidecar(book, belongsTo: book))

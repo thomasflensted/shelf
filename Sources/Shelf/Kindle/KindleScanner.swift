@@ -23,21 +23,15 @@ enum KindleScanner {
     }
 
     private static func listFiles(in documents: URL) -> (books: [BookFile], sdrs: [URL]) {
-        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
-        var books: [BookFile] = []
-        var sdrs: [URL] = []
-        let walker = FileManager.default.enumerator(at: documents, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
-        while let url = walker?.nextObject() as? URL {
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            if values?.isDirectory == true {
-                if url.pathExtension.lowercased() == "sdr" { sdrs.append(url); walker?.skipDescendants() }
-            } else if Formats.isBook(url.lastPathComponent) {
-                books.append(BookFile(url: url, size: Int64(values?.fileSize ?? 0),
-                                      modified: values?.contentModificationDate ?? .distantPast))
-            }
+        let all = FileManager.default.contentsRecursively(of: documents, descendingInto: { !isSidecar($0) })
+        let books = all.filter { !$0.isDirectory && Formats.isBook($0.lastPathComponent) }.map { url in
+            BookFile(url: url, size: url.fileSize,
+                     modified: (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast)
         }
-        return (books, sdrs)
+        return (books, all.filter(isSidecar))
     }
+
+    private static func isSidecar(_ url: URL) -> Bool { url.isDirectory && url.pathExtension.lowercased() == "sdr" }
 
     private static func item(for file: BookFile, sidecars sdrs: [URL], documents: URL) -> KindleItem {
         let meta = Metadata.extract(from: file.url, cover: false)
@@ -64,11 +58,6 @@ enum KindleScanner {
     }
 
     private static func folderSize(_ url: URL) -> Int64 {
-        var total: Int64 = 0
-        let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey])
-        while let file = walker?.nextObject() as? URL {
-            total += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        }
-        return total
+        FileManager.default.contentsRecursively(of: url).reduce(0) { $0 + $1.fileSize }
     }
 }

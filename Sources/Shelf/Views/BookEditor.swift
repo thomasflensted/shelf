@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct BookEditor: View {
     @Environment(Library.self) private var library
@@ -94,9 +93,7 @@ struct BookEditor: View {
     }
 
     private func pickCover() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = Panels.chooseImage() else { return }
         _ = useCover(url)
     }
 
