@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shelf</title>
+  <meta name="description" content="A small, native ebook library for macOS.">
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icon.png" alt="" width="96" height="96">
+      <h1>Shelf</h1>
+      <p>A small, native ebook library for macOS. The parts of Calibre you actually use.</p>
+    </header>
+
+    <section class="features">
+      <article>
+        <span>01</span>
+        <h2>Grid or list</h2>
+        <p>Browse your books as a cover grid or a sortable list.</p>
+      </article>
+      <article>
+        <span>02</span>
+        <h2>Search</h2>
+        <p>Find any book by title, author, series or tag.</p>
+      </article>
+      <article>
+        <span>03</span>
+        <h2>Add books</h2>
+        <p>Drop files or folders on the window, or press <kbd>⌘</kbd><kbd>O</kbd>. EPUB, MOBI, AZW3, PDF, CBZ and more.</p>
+      </article>
+      <article>
+        <span>04</span>
+        <h2>Metadata from the file</h2>
+        <p>Title, author, cover and ISBN are read straight from EPUB, MOBI, AZW3 and PDF files.</p>
+      </article>
+      <article>
+        <span>05</span>
+        <h2>Book info</h2>
+        <p>Press <kbd>⌘</kbd><kbd>I</kbd> for details, rating, description and subjects from Open Library and Google Books. No API keys needed.</p>
+      </article>
+      <article>
+        <span>06</span>
+        <h2>Edit</h2>
+        <p>Press <kbd>⌘</kbd><kbd>E</kbd> or double-click a book to change its title, author, description and cover.</p>
+      </article>
+      <article>
+        <span>07</span>
+        <h2>Calibre import</h2>
+        <p>Copy your Calibre library in, with metadata, covers and every format. The original is never touched.</p>
+      </article>
+      <article>
+        <span>08</span>
+        <h2>Plain folders</h2>
+        <p>Books live in <code>~/Books/Author/Title/</code> next to a single <code>library.json</code>. Pick another folder any time.</p>
+      </article>
+      <article>
+        <span>09</span>
+        <h2>Send to Kindle</h2>
+        <p>Plug in your Kindle and it shows up in the sidebar. Press <kbd>⌘</kbd><kbd>K</kbd> to send the selected books over USB.</p>
+      </article>
+      <article>
+        <span>10</span>
+        <h2>On your Kindle</h2>
+        <p>Green checks mark books that are already on the device. See storage use and every book with its size and source.</p>
+      </article>
+      <article>
+        <span>11</span>
+        <h2>Kindle clean-up</h2>
+        <p>Remove the leftover folders deleted books leave behind. Amazon books are never touched.</p>
+      </article>
+      <article>
+        <span>12</span>
+        <h2>Copy to Shelf</h2>
+        <p>Bring books that only live on your Kindle back into your library, then eject with <kbd>⌘</kbd><kbd>E</kbd>.</p>
+      </article>
+    </section>
+
+    <section class="install" id="install">
+      <h2>Install</h2>
+      <p>Shelf needs macOS 14 or later. Kindle support works with Kindles that mount as a USB drive (10th-gen Paperwhite and older).</p>
+      <a class="button" href="https://github.com/thomasflensted/shelf/releases/latest">Download Shelf</a>
+
+      <h3>1. Move it to Applications</h3>
+      <p>On the download page, click the <code>.zip</code> file under Assets. Double-click it once it's downloaded, then drag Shelf into your Applications folder.</p>
+
+      <h3>2. Open Shelf</h3>
+      <p>macOS will say it can't check the app. Click Done, go to System Settings → Privacy &amp; Security, scroll down and click Open Anyway.</p>
+
+      <h3>3. Add your books</h3>
+      <p>Drop a folder of books on the window, or choose File → Import Calibre Library to bring everything over from Calibre.</p>
+    </section>
+
+    <footer>
+      <a href="https://github.com/thomasflensted/shelf">GitHub</a>
+    </footer>
+  </main>
+</body>
+</html>
