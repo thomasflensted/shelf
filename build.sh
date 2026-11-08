@@ -9,12 +9,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Shelf "$APP/Contents/MacOS/Shelf"
 
-if [ ! -f build/Shelf.icns ]; then
-  swift Resources/make-icon.swift build
-  iconutil -c icns build/Shelf.iconset -o build/Shelf.icns
-  rm -rf build/Shelf.iconset
-fi
-cp build/Shelf.icns "$APP/Contents/Resources/Shelf.icns"
+cp Icon/Shelf.icns "$APP/Contents/Resources/Shelf.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
